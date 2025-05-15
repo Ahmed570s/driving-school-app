@@ -8,6 +8,7 @@ import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarFooter,
 import { toast } from "@/components/ui/use-toast";
 import { PageLayout } from "@/components/ui/page-layout";
 import StudentsSection from "./Students";
+import SettingsSection from "./Settings";
 
 const Admin = () => {
   const {
@@ -51,6 +52,8 @@ const Admin = () => {
     switch (activeSection) {
       case "students":
         return <StudentsSection />;
+      case "settings":
+        return <SettingsSection />;
       case "dashboard":
       default:
         return (
