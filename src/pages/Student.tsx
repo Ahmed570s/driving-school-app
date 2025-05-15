@@ -1,8 +1,8 @@
-
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
+import { PageLayout } from "@/components/ui/page-layout";
 
 const Student = () => {
   const { role, logout } = useAuth();
@@ -21,7 +21,7 @@ const Student = () => {
   };
   
   return (
-    <div className="min-h-screen p-8">
+    <PageLayout>
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Student Dashboard</h1>
@@ -33,7 +33,7 @@ const Student = () => {
           <p className="text-gray-500 mt-2">This is a placeholder for the student interface.</p>
         </div>
       </div>
-    </div>
+    </PageLayout>
   );
 };
 

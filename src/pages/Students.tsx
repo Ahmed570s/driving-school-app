@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, ChevronDown, Filter, Plus, Search, X } from "lucide-react";
@@ -11,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { PageLayout } from "@/components/ui/page-layout";
 import {
   Select,
   SelectTrigger,
@@ -258,7 +258,7 @@ const Students = () => {
   };
   
   return (
-    <div className="p-6">
+    <PageLayout>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Students</h1>
         <Button onClick={handleAddStudent}>
@@ -595,7 +595,7 @@ const Students = () => {
           )}
         </SheetContent>
       </Sheet>
-    </div>
+    </PageLayout>
   );
 };
 
