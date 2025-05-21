@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -69,8 +68,8 @@ const LoginForm = () => {
   return (
     <div className="w-full max-w-md mx-auto space-y-6">
       <div className="space-y-2 text-center">
-        <h1 className="text-3xl font-bold tracking-tight">Welcome to Driving School</h1>
-        <p className="text-gray-500 dark:text-gray-400">Enter your details to sign in to your account</p>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Welcome to Driving School</h1>
+        <p className="text-muted-foreground">Enter your details to sign in to your account</p>
       </div>
       
       <form onSubmit={handleSubmit} className="space-y-4">

@@ -1,0 +1,37 @@
+/* Custom styles for sidebar menu items */
+.hover-highlight {
+  transition: all 0.2s ease-in-out;
+}
+
+.hover-highlight:hover {
+  background-color: hsl(var(--primary) / 0.1) !important;
+  color: hsl(var(--primary)) !important;
+  transform: translateX(4px);
+}
+
+/* For active menu items */
+.hover-highlight[data-active="true"] {
+  background-color: hsl(var(--primary) / 0.15) !important;
+  color: hsl(var(--primary)) !important;
+  font-weight: 500;
+}
+
+/* For the sign out button */
+button.hover-highlight:hover {
+  border-color: hsl(var(--primary)) !important;
+}
+
+/* Fix dark mode for specific components */
+.dark .bg-white {
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+}
+
+.dark .border-gray-100 {
+  border-color: hsl(var(--border));
+}
+
+/* Fix text colors in dark mode */
+.dark .text-gray-500 {
+  color: hsl(var(--muted-foreground));
+} 
