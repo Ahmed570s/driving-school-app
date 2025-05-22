@@ -10,6 +10,7 @@ import { PageLayout } from "@/components/ui/page-layout";
 import StudentsSection from "./Students";
 import SettingsSection from "./Settings";
 import CalendarView from "./Calendar";
+import ActivityLogsSection from "./ActivityLogs";
 
 const Admin = () => {
   const {
@@ -57,6 +58,8 @@ const Admin = () => {
         return <SettingsSection />;
       case "calendar":
         return <CalendarView />;
+      case "activity-logs":
+        return <ActivityLogsSection />;
       case "dashboard":
       default:
         return (
@@ -286,14 +289,6 @@ const Admin = () => {
                     <button onClick={() => setActiveSection("calendar")}>
                       <Calendar size={20} />
                       <span>Calendar</span>
-                    </button>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Create Class">
-                    <button onClick={() => setActiveSection("create-class")}>
-                      <Plus size={20} />
-                      <span>Create Class</span>
                     </button>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
