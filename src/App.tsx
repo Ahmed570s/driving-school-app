@@ -6,9 +6,9 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import Index from "./pages/Index";
-import Admin from "./pages/Admin";
-import Instructor from "./pages/Instructor";
-import Student from "./pages/Student";
+import Admin from "./pages/admin/Admin";
+import Instructor from "./pages/instructor/Instructor";
+import Student from "./pages/student/Student";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
