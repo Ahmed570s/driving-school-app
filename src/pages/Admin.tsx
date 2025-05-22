@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/use-toast";
 import { PageLayout } from "@/components/ui/page-layout";
 import StudentsSection from "./Students";
 import SettingsSection from "./Settings";
+import CalendarView from "./Calendar";
 
 const Admin = () => {
   const {
@@ -54,6 +55,8 @@ const Admin = () => {
         return <StudentsSection />;
       case "settings":
         return <SettingsSection />;
+      case "calendar":
+        return <CalendarView />;
       case "dashboard":
       default:
         return (
