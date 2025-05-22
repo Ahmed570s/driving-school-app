@@ -11,6 +11,10 @@ import StudentsSection from "./Students";
 import SettingsSection from "./Settings";
 import CalendarView from "./Calendar";
 import ActivityLogsSection from "./ActivityLogs";
+import InstructorsSection from "./Instructors";
+import GroupsSection from "./Groups";
+import ReceiptsSection from "./Receipts";
+import CertificatesSection from "./Certificates";
 
 const Admin = () => {
   const {
@@ -54,12 +58,20 @@ const Admin = () => {
     switch (activeSection) {
       case "students":
         return <StudentsSection />;
+      case "instructors":
+        return <InstructorsSection />;
       case "settings":
         return <SettingsSection />;
       case "calendar":
         return <CalendarView />;
       case "activity-logs":
         return <ActivityLogsSection />;
+      case "groups":
+        return <GroupsSection />;
+      case "receipts":
+        return <ReceiptsSection />;
+      case "certificates":
+        return <CertificatesSection />;
       case "dashboard":
       default:
         return (
@@ -301,7 +313,11 @@ const Admin = () => {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Groups">
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={activeSection === "groups"} 
+                    tooltip="Groups"
+                  >
                     <button onClick={() => setActiveSection("groups")}>
                       <Users size={20} />
                       <span>Groups</span>
@@ -309,7 +325,11 @@ const Admin = () => {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Receipts">
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={activeSection === "receipts"} 
+                    tooltip="Receipts"
+                  >
                     <button onClick={() => setActiveSection("receipts")}>
                       <Receipt size={20} />
                       <span>Receipts</span>
@@ -317,7 +337,11 @@ const Admin = () => {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Certificates">
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={activeSection === "certificates"} 
+                    tooltip="Certificates"
+                  >
                     <button onClick={() => setActiveSection("certificates")}>
                       <Medal size={20} />
                       <span>Certificates</span>
