@@ -1,11 +1,21 @@
 import React, { useState } from "react";
 import { PageLayout } from "@/components/ui/page-layout";
 import { Button } from "@/components/ui/button";
-import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, Bookmark, UserRound, Calendar as CalendarIcon } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, Bookmark, UserRound, Calendar as CalendarIcon, AlertTriangle, Check, ChevronsUpDown } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, parseISO, addDays } from "date-fns";
 
 // Define class type
@@ -23,6 +33,51 @@ interface ClassItem {
   duration: string;
   notes: string;
 }
+
+// Define form data interface
+interface ClassFormData {
+  type: "Theory" | "Practical" | "";
+  date: string;
+  startTime: string;
+  duration: number;
+  instructor: string;
+  selectedStudents: string[];
+  selectedGroup: string;
+  notes: string;
+}
+
+// Dummy data for students
+const dummyStudents = [
+  { id: 1, name: "Emma Wilson", group: "Group A", phone: "(555) 123-4567" },
+  { id: 2, name: "John Smith", group: "Group B", phone: "(555) 234-5678" },
+  { id: 3, name: "Sophia Garcia", group: "Group C", phone: "(555) 345-6789" },
+  { id: 4, name: "Michael Johnson", group: "Group A", phone: "(555) 456-7890" },
+  { id: 5, name: "Olivia Brown", group: "Group B", phone: "(555) 567-8901" },
+  { id: 6, name: "David Lee", group: "Group C", phone: "(555) 678-9012" },
+  { id: 7, name: "Ava Martinez", group: "Group A", phone: "(555) 789-0123" },
+  { id: 8, name: "James Wilson", group: "Group B", phone: "(555) 890-1234" },
+  { id: 9, name: "Tyler Rodriguez", group: "Group A", phone: "(555) 234-5678" },
+  { id: 10, name: "Isabella Lopez", group: "Group B", phone: "(555) 345-6789" },
+  { id: 11, name: "Mason Clark", group: "Group C", phone: "(555) 456-7890" },
+  { id: 12, name: "Abigail Turner", group: "Group A", phone: "(555) 567-8901" },
+];
+
+// Dummy data for groups
+const dummyGroups = [
+  { id: "Group A", name: "Group A", studentCount: 4 },
+  { id: "Group B", name: "Group B", studentCount: 4 },
+  { id: "Group C", name: "Group C", studentCount: 4 },
+];
+
+// Instructors list
+const instructors = ["Mike Brown", "Lisa Taylor", "James Wilson"];
+
+// Duration options
+const durationOptions = [
+  { value: 60, label: "60 minutes" },
+  { value: 90, label: "90 minutes" },
+  { value: 120, label: "120 minutes" },
+];
 
 // Expanded dummy data for calendar events
 const dummyClasses: ClassItem[] = [
@@ -713,6 +768,20 @@ const Calendar = () => {
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   
+  // Add Class Modal State
+  const [modalOpen, setModalOpen] = useState(false);
+  const [studentComboboxOpen, setStudentComboboxOpen] = useState(false);
+  const [formData, setFormData] = useState<ClassFormData>({
+    type: "",
+    date: format(new Date(), 'yyyy-MM-dd'),
+    startTime: "10:00",
+    duration: 60,
+    instructor: "",
+    selectedStudents: [],
+    selectedGroup: "",
+    notes: "",
+  });
+  
   // Get days for current month
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -729,6 +798,97 @@ const Calendar = () => {
   const getClassesForDay = (day: Date) => {
     const dateString = format(day, 'yyyy-MM-dd');
     return instructorClasses.filter(cls => cls.date === dateString);
+  };
+  
+  // Get classes for selected date in form
+  const getClassesForSelectedDate = () => {
+    return dummyClasses.filter(cls => cls.date === formData.date);
+  };
+  
+  // Check instructor availability
+  const checkInstructorConflict = () => {
+    if (!formData.instructor || !formData.date || !formData.startTime) return null;
+    
+    const conflictingClass = dummyClasses.find(cls => 
+      cls.instructor === formData.instructor && 
+      cls.date === formData.date && 
+      cls.startTime === formData.startTime
+    );
+    
+    return conflictingClass;
+  };
+  
+  // Get students for selected group
+  const getStudentsForGroup = (groupId: string) => {
+    return dummyStudents.filter(student => student.group === groupId);
+  };
+  
+  // Handle form field changes
+  const handleFormChange = (field: keyof ClassFormData, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value,
+      // Reset student selection when group is selected and vice versa
+      ...(field === 'selectedGroup' && value ? { selectedStudents: [] } : {}),
+      ...(field === 'selectedStudents' && value.length > 0 ? { selectedGroup: "" } : {}),
+    }));
+  };
+  
+  // Handle student selection
+  const handleStudentToggle = (studentName: string) => {
+    const updatedStudents = formData.selectedStudents.includes(studentName)
+      ? formData.selectedStudents.filter(s => s !== studentName)
+      : [...formData.selectedStudents, studentName];
+    
+    handleFormChange('selectedStudents', updatedStudents);
+  };
+  
+  // Calculate end time based on start time and duration
+  const calculateEndTime = (startTime: string, duration: number) => {
+    const [hours, minutes] = startTime.split(':').map(Number);
+    const startDate = new Date();
+    startDate.setHours(hours, minutes, 0, 0);
+    
+    const endDate = new Date(startDate.getTime() + duration * 60000);
+    return format(endDate, 'HH:mm');
+  };
+  
+  // Get active students (either selected manually or from group)
+  const getActiveStudents = () => {
+    if (formData.selectedGroup) {
+      return getStudentsForGroup(formData.selectedGroup);
+    }
+    return dummyStudents.filter(student => formData.selectedStudents.includes(student.name));
+  };
+  
+  // Handle form submission
+  const handleSubmit = () => {
+    // Basic validation
+    if (!formData.type || !formData.date || !formData.instructor) {
+      alert("Please fill in all required fields");
+      return;
+    }
+    
+    if (!formData.selectedGroup && formData.selectedStudents.length === 0) {
+      alert("Please select students or a group");
+      return;
+    }
+    
+    // Show success message
+    alert("Class created successfully!");
+    
+    // Reset form and close modal
+    setFormData({
+      type: "",
+      date: format(new Date(), 'yyyy-MM-dd'),
+      startTime: "10:00",
+      duration: 60,
+      instructor: "",
+      selectedStudents: [],
+      selectedGroup: "",
+      notes: "",
+    });
+    setModalOpen(false);
   };
   
   // Generate weekly view days (current week)
@@ -946,11 +1106,176 @@ const Calendar = () => {
     <PageLayout>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Calendar</h1>
-        <Button>
+        <Button onClick={() => setModalOpen(true)}>
           <Plus className="mr-1 h-4 w-4" />
           Create Class
         </Button>
       </div>
+
+      {/* Simple Add Class Dialog - Following Add Instructor pattern */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Add New Class</DialogTitle>
+            <DialogDescription>
+              Fill in the class details to schedule a new session.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-6 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="class-type">Class Type</Label>
+                <Select 
+                  value={formData.type} 
+                  onValueChange={(value: "Theory" | "Practical") => handleFormChange('type', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select class type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Theory">Theory</SelectItem>
+                    <SelectItem value="Practical">Practical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="instructor">Instructor</Label>
+                <Select 
+                  value={formData.instructor} 
+                  onValueChange={(value) => handleFormChange('instructor', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select instructor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {instructors.map((instructor) => (
+                      <SelectItem key={instructor} value={instructor}>
+                        {instructor}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="date">Date</Label>
+                <Input
+                  id="date"
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => handleFormChange('date', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="time">Start Time</Label>
+                <Input
+                  id="time"
+                  type="time"
+                  value={formData.startTime}
+                  onChange={(e) => handleFormChange('startTime', e.target.value)}
+                />
+              </div>
+            </div>
+            
+            {/* Conditional Student Selection based on Class Type */}
+            {formData.type && (
+              <div className="space-y-2">
+                {formData.type === "Theory" ? (
+                  // Theory: Show Group Dropdown
+                  <>
+                    <Label htmlFor="group">Select Group</Label>
+                    <Select 
+                      value={formData.selectedGroup} 
+                      onValueChange={(value) => handleFormChange('selectedGroup', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a group for theory class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {dummyGroups.map((group) => (
+                          <SelectItem key={group.id} value={group.id}>
+                            {group.name} ({group.studentCount} students)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </>
+                ) : (
+                  // Practical: Show Single Student Dropdown with Search
+                  <>
+                    <Label htmlFor="student">Select Student</Label>
+                    <Popover open={studentComboboxOpen} onOpenChange={setStudentComboboxOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={studentComboboxOpen}
+                          className="w-full justify-between"
+                        >
+                          {formData.selectedStudents[0] 
+                            ? dummyStudents.find(student => student.name === formData.selectedStudents[0])?.name + 
+                              ` (${dummyStudents.find(student => student.name === formData.selectedStudents[0])?.id})`
+                            : "Select a student for practical class..."
+                          }
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0">
+                        <Command>
+                          <CommandInput placeholder="Search students..." />
+                          <CommandList>
+                            <CommandEmpty>No student found.</CommandEmpty>
+                            <CommandGroup>
+                              {dummyStudents.map((student) => (
+                                <CommandItem
+                                  key={student.id}
+                                  value={student.name}
+                                  onSelect={(currentValue) => {
+                                    const newValue = currentValue === formData.selectedStudents[0] ? [] : [currentValue];
+                                    handleFormChange('selectedStudents', newValue);
+                                    setStudentComboboxOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      formData.selectedStudents[0] === student.name ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {student.name} ({student.id})
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </>
+                )}
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Input
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => handleFormChange('notes', e.target.value)}
+                placeholder="Class notes or description"
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit}>
+              Create Class
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       
       <Card>
         <CardContent className="p-6">
