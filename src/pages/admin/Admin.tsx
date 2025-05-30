@@ -1,12 +1,20 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Activity, Calendar, FileText, LogOut, Plus, Receipt, UserRound, Users, Clock, Medal, Settings } from "lucide-react";
+import { Activity, Calendar, FileText, LogOut, Plus, Receipt, UserRound, Users, Clock, Medal, Settings, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarFooter, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarGroupLabel, SidebarGroup } from "@/components/ui/sidebar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { PageLayout } from "@/components/ui/page-layout";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 import StudentsSection from "./Students";
 import SettingsSection from "./Settings";
 import CalendarView from "./Calendar";
@@ -18,6 +26,40 @@ import CertificatesSection from "./Certificates";
 import StudentProfile from "./StudentProfile";
 import CreateStudent from "./CreateStudent";
 
+// Define form data interface for class creation
+interface ClassFormData {
+  type: "Theory" | "Practical" | "";
+  date: string;
+  startTime: string;
+  duration: number;
+  instructor: string;
+  selectedStudents: string[];
+  selectedGroup: string;
+  notes: string;
+}
+
+// Dummy data for students
+const dummyStudents = [
+  { id: 1, name: "Emma Wilson", group: "Group A", phone: "(555) 123-4567" },
+  { id: 2, name: "John Smith", group: "Group B", phone: "(555) 234-5678" },
+  { id: 3, name: "Sophia Garcia", group: "Group C", phone: "(555) 345-6789" },
+  { id: 4, name: "Michael Johnson", group: "Group A", phone: "(555) 456-7890" },
+  { id: 5, name: "Olivia Brown", group: "Group B", phone: "(555) 567-8901" },
+  { id: 6, name: "David Lee", group: "Group C", phone: "(555) 678-9012" },
+  { id: 7, name: "Ava Martinez", group: "Group A", phone: "(555) 789-0123" },
+  { id: 8, name: "James Wilson", group: "Group B", phone: "(555) 890-1234" },
+];
+
+// Dummy data for groups
+const dummyGroups = [
+  { id: "Group A", name: "Group A", studentCount: 4 },
+  { id: "Group B", name: "Group B", studentCount: 4 },
+  { id: "Group C", name: "Group C", studentCount: 4 },
+];
+
+// Instructors list
+const instructors = ["Mike Brown", "Lisa Taylor", "James Wilson"];
+
 const Admin = () => {
   const {
     role,
@@ -27,6 +69,20 @@ const Admin = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [isNewStudent, setIsNewStudent] = useState(false);
+
+  // Class creation modal state
+  const [createClassModalOpen, setCreateClassModalOpen] = useState(false);
+  const [studentComboboxOpen, setStudentComboboxOpen] = useState(false);
+  const [classFormData, setClassFormData] = useState<ClassFormData>({
+    type: "",
+    date: format(new Date(), 'yyyy-MM-dd'),
+    startTime: "10:00",
+    duration: 60,
+    instructor: "",
+    selectedStudents: [],
+    selectedGroup: "",
+    notes: "",
+  });
 
   // Protect route - redirect if not admin
   useState(() => {
@@ -45,14 +101,11 @@ const Admin = () => {
   };
   
   const handleAddStudent = () => {
-    setActiveSection("create-student");
+    navigateToCreateStudent();
   };
   
   const handleCreateClass = () => {
-    toast({
-      title: "Create Class",
-      description: "This feature is not implemented yet."
-    });
+    setCreateClassModalOpen(true);
   };
   
   // Function to handle student profile navigation
@@ -84,6 +137,67 @@ const Admin = () => {
     setSelectedStudentId(studentId);
     setIsNewStudent(false); // Don't auto-edit since we already have the data
     setActiveSection("student-profile");
+  };
+
+  // Class form handling functions
+  const handleClassFormChange = (field: keyof ClassFormData, value: any) => {
+    setClassFormData(prev => ({
+      ...prev,
+      [field]: value,
+      // Reset student selection when group is selected and vice versa
+      ...(field === 'selectedGroup' && value ? { selectedStudents: [] } : {}),
+      ...(field === 'selectedStudents' && value.length > 0 ? { selectedGroup: "" } : {}),
+    }));
+  };
+
+  // Handle student selection for practical classes
+  const handleStudentToggle = (studentName: string) => {
+    const updatedStudents = classFormData.selectedStudents.includes(studentName)
+      ? classFormData.selectedStudents.filter(s => s !== studentName)
+      : [...classFormData.selectedStudents, studentName];
+    
+    handleClassFormChange('selectedStudents', updatedStudents);
+  };
+
+  // Handle class form submission
+  const handleClassFormSubmit = () => {
+    // Basic validation
+    if (!classFormData.type || !classFormData.date || !classFormData.instructor) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!classFormData.selectedGroup && classFormData.selectedStudents.length === 0) {
+      toast({
+        title: "Validation Error", 
+        description: "Please select students or a group",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Show success message
+    toast({
+      title: "Class Created Successfully",
+      description: "The class has been scheduled and added to the calendar."
+    });
+    
+    // Reset form and close modal
+    setClassFormData({
+      type: "",
+      date: format(new Date(), 'yyyy-MM-dd'),
+      startTime: "10:00",
+      duration: 60,
+      instructor: "",
+      selectedStudents: [],
+      selectedGroup: "",
+      notes: "",
+    });
+    setCreateClassModalOpen(false);
   };
   
   const renderActiveSection = () => {
@@ -289,6 +403,171 @@ const Admin = () => {
   
   return <SidebarProvider>
       <div className="flex h-screen w-full bg-background">
+        {/* Create Class Modal */}
+        <Dialog open={createClassModalOpen} onOpenChange={setCreateClassModalOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Add New Class</DialogTitle>
+              <DialogDescription>
+                Fill in the class details to schedule a new session.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid gap-6 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="class-type">Class Type</Label>
+                  <Select 
+                    value={classFormData.type} 
+                    onValueChange={(value: "Theory" | "Practical") => handleClassFormChange('type', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select class type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Theory">Theory</SelectItem>
+                      <SelectItem value="Practical">Practical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="instructor">Instructor</Label>
+                  <Select 
+                    value={classFormData.instructor} 
+                    onValueChange={(value) => handleClassFormChange('instructor', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select instructor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {instructors.map((instructor) => (
+                        <SelectItem key={instructor} value={instructor}>
+                          {instructor}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="date">Date</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={classFormData.date}
+                    onChange={(e) => handleClassFormChange('date', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="time">Start Time</Label>
+                  <Input
+                    id="time"
+                    type="time"
+                    value={classFormData.startTime}
+                    onChange={(e) => handleClassFormChange('startTime', e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              {/* Conditional Student Selection based on Class Type */}
+              {classFormData.type && (
+                <div className="space-y-2">
+                  {classFormData.type === "Theory" ? (
+                    // Theory: Show Group Dropdown
+                    <>
+                      <Label htmlFor="group">Select Group</Label>
+                      <Select 
+                        value={classFormData.selectedGroup} 
+                        onValueChange={(value) => handleClassFormChange('selectedGroup', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a group for theory class" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {dummyGroups.map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              {group.name} ({group.studentCount} students)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </>
+                  ) : (
+                    // Practical: Show Single Student Dropdown with Search
+                    <>
+                      <Label htmlFor="student">Select Student</Label>
+                      <Popover open={studentComboboxOpen} onOpenChange={setStudentComboboxOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={studentComboboxOpen}
+                            className="w-full justify-between"
+                          >
+                            {classFormData.selectedStudents[0] 
+                              ? dummyStudents.find(student => student.name === classFormData.selectedStudents[0])?.name + 
+                                ` (${dummyStudents.find(student => student.name === classFormData.selectedStudents[0])?.id})`
+                              : "Select a student for practical class..."
+                            }
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[400px] p-0">
+                          <Command>
+                            <CommandInput placeholder="Search students..." />
+                            <CommandList>
+                              <CommandEmpty>No student found.</CommandEmpty>
+                              <CommandGroup>
+                                {dummyStudents.map((student) => (
+                                  <CommandItem
+                                    key={student.id}
+                                    value={student.name}
+                                    onSelect={(currentValue) => {
+                                      const newValue = currentValue === classFormData.selectedStudents[0] ? [] : [currentValue];
+                                      handleClassFormChange('selectedStudents', newValue);
+                                      setStudentComboboxOpen(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        classFormData.selectedStudents[0] === student.name ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {student.name} ({student.id})
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </>
+                  )}
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Input
+                  id="notes"
+                  value={classFormData.notes}
+                  onChange={(e) => handleClassFormChange('notes', e.target.value)}
+                  placeholder="Class notes or description"
+                />
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateClassModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleClassFormSubmit}>
+                Create Class
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Sidebar */}
         <Sidebar>
           <SidebarHeader className="">
