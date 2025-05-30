@@ -587,10 +587,8 @@ const Students = ({ onNavigateToStudentProfile }: { onNavigateToStudentProfile?:
               </div>
               
               {/* Action buttons */}
-              <div className="mt-6 space-y-2">
-                <Button className="w-full">Edit Student</Button>
+              <div className="mt-6">
                 <Button 
-                  variant="outline" 
                   className="w-full"
                   onClick={() => onNavigateToStudentProfile?.(selectedStudent.id)}
                 >
