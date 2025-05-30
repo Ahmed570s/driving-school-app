@@ -290,7 +290,7 @@ const GroupsSection = () => {
             Create Group
           </Button>
         </div>
-
+        
         {/* Search and Filters */}
         <Card>
           <CardContent className="p-4">

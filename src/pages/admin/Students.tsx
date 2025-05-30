@@ -20,115 +20,12 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/components/ui/use-toast";
+import { BasicStudent, studentsListData, addNewStudent } from "@/data/students";
 
 // Type definitions
 type StudentStatus = "active" | "on-hold" | "completed" | "dropped";
 type StudentGroup = "A" | "B" | "C" | "D";
 type SortOption = "name" | "hours" | "group" | "status";
-
-interface Student {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  group: StudentGroup;
-  hoursDone: number;
-  status: StudentStatus;
-  hasBalance: boolean;
-  hasMissingClasses: boolean;
-}
-
-// Dummy data
-const dummyStudents: Student[] = [
-  {
-    id: "1",
-    name: "Emma Wilson",
-    email: "emma.wilson@example.com",
-    phone: "(555) 123-4567",
-    group: "A",
-    hoursDone: 24,
-    status: "active",
-    hasBalance: false,
-    hasMissingClasses: false
-  },
-  {
-    id: "2",
-    name: "John Smith",
-    email: "john.smith@example.com",
-    phone: "(555) 234-5678",
-    group: "B",
-    hoursDone: 16,
-    status: "on-hold",
-    hasBalance: true,
-    hasMissingClasses: false
-  },
-  {
-    id: "3",
-    name: "Sophia Garcia",
-    email: "sophia.garcia@example.com",
-    phone: "(555) 345-6789",
-    group: "A",
-    hoursDone: 30,
-    status: "completed",
-    hasBalance: false,
-    hasMissingClasses: false
-  },
-  {
-    id: "4",
-    name: "Michael Johnson",
-    email: "michael.johnson@example.com",
-    phone: "(555) 456-7890",
-    group: "C",
-    hoursDone: 8,
-    status: "active",
-    hasBalance: false,
-    hasMissingClasses: true
-  },
-  {
-    id: "5",
-    name: "Olivia Brown",
-    email: "olivia.brown@example.com",
-    phone: "(555) 567-8901",
-    group: "B",
-    hoursDone: 20,
-    status: "active",
-    hasBalance: true,
-    hasMissingClasses: true
-  },
-  {
-    id: "6",
-    name: "David Lee",
-    email: "david.lee@example.com",
-    phone: "(555) 678-9012",
-    group: "D",
-    hoursDone: 4,
-    status: "dropped",
-    hasBalance: true,
-    hasMissingClasses: false
-  },
-  {
-    id: "7",
-    name: "Ava Martinez",
-    email: "ava.martinez@example.com",
-    phone: "(555) 789-0123",
-    group: "C",
-    hoursDone: 12,
-    status: "active",
-    hasBalance: false,
-    hasMissingClasses: false
-  },
-  {
-    id: "8",
-    name: "James Wilson",
-    email: "james.wilson@example.com",
-    phone: "(555) 890-1234",
-    group: "A",
-    hoursDone: 28,
-    status: "completed",
-    hasBalance: false,
-    hasMissingClasses: false
-  }
-];
 
 // Filter type definitions
 interface Filters {
@@ -139,7 +36,7 @@ interface Filters {
 }
 
 // Students page component
-const Students = ({ onNavigateToStudentProfile }: { onNavigateToStudentProfile?: (studentId: string) => void }) => {
+const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { onNavigateToStudentProfile?: (studentId: string, isNewStudent?: boolean) => void, onNavigateToCreateStudent?: () => void }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -151,10 +48,10 @@ const Students = ({ onNavigateToStudentProfile }: { onNavigateToStudentProfile?:
     hasBalance: null,
     hasMissingClasses: null
   });
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<BasicStudent | null>(null);
   
   // Apply filters and search
-  const filteredStudents = dummyStudents.filter(student => {
+  const filteredStudents = studentsListData.filter(student => {
     // Search by name, email, or phone
     const matchesSearch = debouncedSearchTerm === "" || 
       student.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
@@ -220,7 +117,7 @@ const Students = ({ onNavigateToStudentProfile }: { onNavigateToStudentProfile?:
   };
   
   // Show student details
-  const showStudentDetails = (student: Student) => {
+  const showStudentDetails = (student: BasicStudent) => {
     setSelectedStudent(student);
   };
   
@@ -251,10 +148,15 @@ const Students = ({ onNavigateToStudentProfile }: { onNavigateToStudentProfile?:
   
   // Add new student handler
   const handleAddStudent = () => {
-    toast({
-      title: "Add New Student",
-      description: "This feature is not implemented yet."
-    });
+    // Navigate to create student page
+    if (onNavigateToCreateStudent) {
+      onNavigateToCreateStudent();
+    } else {
+      toast({
+        title: "Navigation Error",
+        description: "Unable to navigate to create student page."
+      });
+    }
   };
   
   return (
@@ -499,14 +401,14 @@ const Students = ({ onNavigateToStudentProfile }: { onNavigateToStudentProfile?:
                   <TableCell>
                     <Badge
                       variant="outline"
-                      className={`
-                        ${student.status === 'active' ? 'border-green-500 text-green-500' : ''}
-                        ${student.status === 'on-hold' ? 'border-amber-500 text-amber-500' : ''}
-                        ${student.status === 'completed' ? 'border-blue-500 text-blue-500' : ''}
-                        ${student.status === 'dropped' ? 'border-red-500 text-red-500' : ''}
-                      `}
+                      className={
+                        student.status === 'active' ? 'border-green-500 text-green-600 bg-green-50' :
+                        student.status === 'on-hold' ? 'border-yellow-500 text-yellow-600 bg-yellow-50' :
+                        student.status === 'completed' ? 'border-blue-500 text-blue-600 bg-blue-50' :
+                        'border-red-500 text-red-600 bg-red-50'
+                      }
                     >
-                      {student.status.charAt(0).toUpperCase() + student.status.slice(1)}
+                      {student.status.charAt(0).toUpperCase() + student.status.slice(1).replace('-', ' ')}
                     </Badge>
                   </TableCell>
                 </TableRow>
@@ -544,14 +446,14 @@ const Students = ({ onNavigateToStudentProfile }: { onNavigateToStudentProfile?:
                         <p className="text-sm font-medium mb-1">Status</p>
                         <Badge
                           variant="outline"
-                          className={`
-                            ${selectedStudent.status === 'active' ? 'border-green-500 text-green-500' : ''}
-                            ${selectedStudent.status === 'on-hold' ? 'border-amber-500 text-amber-500' : ''}
-                            ${selectedStudent.status === 'completed' ? 'border-blue-500 text-blue-500' : ''}
-                            ${selectedStudent.status === 'dropped' ? 'border-red-500 text-red-500' : ''}
-                          `}
+                          className={
+                            selectedStudent.status === 'active' ? 'border-green-500 text-green-600 bg-green-50' :
+                            selectedStudent.status === 'on-hold' ? 'border-yellow-500 text-yellow-600 bg-yellow-50' :
+                            selectedStudent.status === 'completed' ? 'border-blue-500 text-blue-600 bg-blue-50' :
+                            'border-red-500 text-red-600 bg-red-50'
+                          }
                         >
-                          {selectedStudent.status.charAt(0).toUpperCase() + selectedStudent.status.slice(1)}
+                          {selectedStudent.status.charAt(0).toUpperCase() + selectedStudent.status.slice(1).replace('-', ' ')}
                         </Badge>
                       </div>
                     </div>
@@ -590,7 +492,7 @@ const Students = ({ onNavigateToStudentProfile }: { onNavigateToStudentProfile?:
               <div className="mt-6">
                 <Button 
                   className="w-full"
-                  onClick={() => onNavigateToStudentProfile?.(selectedStudent.id)}
+                  onClick={() => onNavigateToStudentProfile?.(selectedStudent.id, false)}
                 >
                   View Full Profile
                 </Button>

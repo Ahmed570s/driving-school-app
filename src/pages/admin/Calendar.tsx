@@ -969,16 +969,16 @@ const Calendar = () => {
               <div className="text-sm font-semibold mb-2 text-foreground">{format(day, 'd')}</div>
               
               <div className="space-y-1.5">
-                {displayClasses.map((cls) => (
-                  <div
-                    key={cls.id}
+              {displayClasses.map((cls) => (
+                <div
+                  key={cls.id}
                     className={`${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"} p-2 text-xs rounded-md cursor-pointer hover:shadow-sm transition-all duration-200 hover:scale-[1.02]`}
-                    onClick={() => handleClassClick(cls)}
-                  >
+                  onClick={() => handleClassClick(cls)}
+                >
                     <div className="font-medium truncate">{cls.student}</div>
                     <div className="text-xs opacity-80">{cls.startTime} - {cls.endTime}</div>
-                  </div>
-                ))}
+                </div>
+              ))}
               </div>
               
               {/* Show "+X more" message if there are additional classes */}

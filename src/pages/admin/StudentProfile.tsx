@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/components/ui/use-toast";
+import { Student, Document, studentProfilesData, createCompleteStudent } from "@/data/students";
 
 // Types
 interface Session {
@@ -64,40 +65,6 @@ interface Session {
   instructor?: string;
   notes?: string;
   instructorComments?: string;
-}
-
-interface Document {
-  id: string;
-  name: string;
-  type: "ID" | "Medical" | "Insurance" | "License" | "Other";
-  fileType: "pdf" | "jpg" | "png" | "doc" | "docx";
-  uploadDate: string;
-  size: string;
-  status: "approved" | "pending" | "rejected";
-}
-
-interface Student {
-  id: string;
-  firstName: string;
-  lastName: string;
-  studentId: string;
-  phone: string;
-  email: string;
-  whatsapp: string;
-  // Address fields
-  street: string;
-  apartment?: string; // Optional since not all addresses have apartment numbers
-  city: string;
-  postalCode: string;
-  // Additional personal information
-  dateOfBirth: string;
-  learnerLicenseNumber?: string; // Optional since they get it during the course
-  currentPhase: 1 | 2 | 3 | 4;
-  totalCompletedSessions: number;
-  enrollmentDate: string;
-  needsSupport: boolean;
-  attendanceIssues: boolean;
-  documents: Document[];
 }
 
 // Government curriculum sessions template
@@ -138,107 +105,17 @@ const sessionTemplate: Session[] = [
   { id: 27, phase: 4, name: "In-Car Session 15", type: "Practical", completed: false }
 ];
 
-// Dummy student data
-const dummyStudents: Record<string, Student> = {
-  "1": {
-    id: "1",
-    firstName: "Emma",
-    lastName: "Wilson",
-    studentId: "DS2024001",
-    phone: "(555) 123-4567",
-    email: "emma.wilson@email.com",
-    whatsapp: "(555) 123-4567",
-    street: "123 Elm St",
-    apartment: "Apt 4B",
-    city: "Springfield",
-    postalCode: "62704",
-    dateOfBirth: "1990-05-15",
-    learnerLicenseNumber: "L123456789",
-    currentPhase: 2,
-    totalCompletedSessions: 10,
-    enrollmentDate: "2024-01-15",
-    needsSupport: false,
-    attendanceIssues: false,
-    documents: [
-      {
-        id: "doc1",
-        name: "Driver_License_Photo.jpg",
-        type: "ID",
-        fileType: "jpg",
-        uploadDate: "2024-01-16",
-        size: "2.3 MB",
-        status: "approved"
-      },
-      {
-        id: "doc2",
-        name: "Medical_Certificate.pdf",
-        type: "Medical",
-        fileType: "pdf",
-        uploadDate: "2024-01-18",
-        size: "856 KB",
-        status: "approved"
-      },
-      {
-        id: "doc3",
-        name: "Insurance_Proof.pdf",
-        type: "Insurance",
-        fileType: "pdf",
-        uploadDate: "2024-01-20",
-        size: "1.1 MB",
-        status: "pending"
-      }
-    ]
-  },
-  "2": {
-    id: "2", 
-    firstName: "John",
-    lastName: "Smith",
-    studentId: "DS2024002",
-    phone: "(555) 234-5678",
-    email: "john.smith@email.com",
-    whatsapp: "(555) 234-5678",
-    street: "456 Oak St",
-    city: "Springfield",
-    postalCode: "62704",
-    dateOfBirth: "1992-07-20",
-    // No learner license number yet - showing optional field
-    currentPhase: 1,
-    totalCompletedSessions: 3,
-    enrollmentDate: "2024-02-01",
-    needsSupport: true,
-    attendanceIssues: false,
-    documents: [
-      {
-        id: "doc4",
-        name: "Birth_Certificate.pdf",
-        type: "ID",
-        fileType: "pdf",
-        uploadDate: "2024-02-02",
-        size: "1.5 MB",
-        status: "approved"
-      },
-      {
-        id: "doc5",
-        name: "Eye_Exam_Results.pdf",
-        type: "Medical",
-        fileType: "pdf",
-        uploadDate: "2024-02-03",
-        size: "645 KB",
-        status: "rejected"
-      }
-    ]
-  }
-};
-
 // Instructors
 const instructors = ["Mike Brown", "Lisa Taylor", "James Wilson"];
 
 const StudentProfile = ({ 
   studentId, 
-  onBack 
+  onBack,
+  initialEditMode = false 
 }: { 
   studentId: string | null; 
   onBack: () => void;
+  initialEditMode?: boolean;
 }) => {
   const navigate = useNavigate();
   
@@ -249,12 +126,20 @@ const StudentProfile = ({
   const [phaseFilter, setPhaseFilter] = useState<"all" | "1" | "2" | "3" | "4">("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "Theory" | "Practical" | "Observation">("all");
   const [completionFilter, setCompletionFilter] = useState<"all" | "completed" | "pending">("all");
-  const [isEditingStudent, setIsEditingStudent] = useState(false);
+  const [isEditingStudent, setIsEditingStudent] = useState(initialEditMode);
   const [editedStudent, setEditedStudent] = useState<Student | null>(null);
 
-  // Get student data
-  const student = studentId ? dummyStudents[studentId] : null;
+  // Get student data and ensure it's complete
+  const rawStudent = studentId ? studentProfilesData[studentId] : null;
+  const student = rawStudent ? createCompleteStudent(rawStudent) : null;
   
+  // Initialize editedStudent when entering edit mode or when initialEditMode is true
+  React.useEffect(() => {
+    if (initialEditMode && student && !editedStudent) {
+      setEditedStudent({ ...student });
+    }
+  }, [initialEditMode, student, editedStudent]);
+
   if (!student) {
     return (
       <div className="text-center py-8">
@@ -483,6 +368,67 @@ const StudentProfile = ({
                     ) : (
                       <p className="text-lg font-semibold">{student.studentId}</p>
                     )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1">
+                      <Label className="text-sm font-medium text-muted-foreground">Assigned Group</Label>
+                      {isEditingStudent ? (
+                        <Select 
+                          value={editedStudent?.group || ''} 
+                          onValueChange={(value) => handleStudentFieldChange('group', value)}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="Select group" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="A">Group A</SelectItem>
+                            <SelectItem value="B">Group B</SelectItem>
+                            <SelectItem value="C">Group C</SelectItem>
+                            <SelectItem value="D">Group D</SelectItem>
+                            <SelectItem value="none">None</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p>{student.group === "none" ? "None" : `Group ${student.group}`}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Flag className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1">
+                      <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                      {isEditingStudent ? (
+                        <Select 
+                          value={editedStudent?.status || ''} 
+                          onValueChange={(value) => handleStudentFieldChange('status', value)}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="on-hold">On Hold</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                            <SelectItem value="dropped">Dropped</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="mt-1">
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              student.status === "active" ? "border-green-500 text-green-600 bg-green-50" :
+                              student.status === "on-hold" ? "border-yellow-500 text-yellow-600 bg-yellow-50" :
+                              student.status === "completed" ? "border-blue-500 text-blue-600 bg-blue-50" :
+                              "border-red-500 text-red-600 bg-red-50"
+                            }
+                          >
+                            {student.status.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Phone className="h-4 w-4 text-muted-foreground" />

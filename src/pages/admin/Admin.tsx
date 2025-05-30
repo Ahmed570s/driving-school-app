@@ -16,6 +16,7 @@ import GroupsSection from "./Groups";
 import ReceiptsSection from "./Receipts";
 import CertificatesSection from "./Certificates";
 import StudentProfile from "./StudentProfile";
+import CreateStudent from "./CreateStudent";
 
 const Admin = () => {
   const {
@@ -25,6 +26,7 @@ const Admin = () => {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState("dashboard");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [isNewStudent, setIsNewStudent] = useState(false);
 
   // Protect route - redirect if not admin
   useState(() => {
@@ -43,10 +45,7 @@ const Admin = () => {
   };
   
   const handleAddStudent = () => {
-    toast({
-      title: "Add Student",
-      description: "This feature is not implemented yet."
-    });
+    setActiveSection("create-student");
   };
   
   const handleCreateClass = () => {
@@ -57,21 +56,42 @@ const Admin = () => {
   };
   
   // Function to handle student profile navigation
-  const navigateToStudentProfile = (studentId: string) => {
+  const navigateToStudentProfile = (studentId: string, isNewStudentFlag: boolean = false) => {
     setSelectedStudentId(studentId);
+    setIsNewStudent(isNewStudentFlag);
     setActiveSection("student-profile");
   };
 
   // Function to navigate back from student profile
   const navigateBackFromStudentProfile = () => {
     setSelectedStudentId(null);
+    setIsNewStudent(false);
     setActiveSection("students");
+  };
+
+  // Function to navigate to create student
+  const navigateToCreateStudent = () => {
+    setActiveSection("create-student");
+  };
+
+  // Function to navigate back from create student
+  const navigateBackFromCreateStudent = () => {
+    setActiveSection("students");
+  };
+
+  // Function to handle student creation completion
+  const handleStudentCreated = (studentId: string) => {
+    setSelectedStudentId(studentId);
+    setIsNewStudent(false); // Don't auto-edit since we already have the data
+    setActiveSection("student-profile");
   };
   
   const renderActiveSection = () => {
     switch (activeSection) {
       case "students":
-        return <StudentsSection onNavigateToStudentProfile={navigateToStudentProfile} />;
+        return <StudentsSection onNavigateToStudentProfile={navigateToStudentProfile} onNavigateToCreateStudent={navigateToCreateStudent} />;
+      case "create-student":
+        return <CreateStudent onBack={navigateBackFromCreateStudent} onStudentCreated={handleStudentCreated} />;
       case "instructors":
         return <InstructorsSection />;
       case "settings":
@@ -87,7 +107,11 @@ const Admin = () => {
       case "certificates":
         return <CertificatesSection />;
       case "student-profile":
-        return <StudentProfile studentId={selectedStudentId} onBack={navigateBackFromStudentProfile} />;
+        return <StudentProfile 
+          studentId={selectedStudentId} 
+          onBack={navigateBackFromStudentProfile} 
+          initialEditMode={isNewStudent}
+        />;
       case "dashboard":
       default:
         return (
