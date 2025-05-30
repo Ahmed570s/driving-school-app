@@ -937,24 +937,24 @@ const Calendar = () => {
         </div>
       </div>
       
-      <div className="grid grid-cols-7 gap-px bg-muted">
+      <div className="grid grid-cols-7 gap-3 bg-background p-2">
         {/* Days of week */}
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-          <div key={day} className="text-center p-2 font-medium">
+          <div key={day} className="text-center py-3 font-medium text-muted-foreground bg-muted rounded-lg">
             {day}
           </div>
         ))}
         
         {/* Empty cells for days of previous month */}
         {Array.from({ length: monthStart.getDay() }).map((_, index) => (
-          <div key={`empty-start-${index}`} className="bg-card p-2 min-h-24"></div>
+          <div key={`empty-start-${index}`} className="bg-card/50 rounded-xl p-3 h-36 shadow-sm border border-border/50"></div>
         ))}
         
         {/* Calendar days */}
         {monthDays.map((day) => {
           const dayClasses = getClassesForDay(day);
-          const displayClasses = dayClasses.slice(0, 2); // Only show first 2 classes
-          const remainingCount = dayClasses.length - 2;  // Count remaining classes
+          const displayClasses = dayClasses.slice(0, 1); // Only show first 1 class
+          const remainingCount = dayClasses.length - 1;  // Count remaining classes
           const dayNum = day.getDay(); // 0 = Sunday, 3 = Wednesday
           const isWednesday = dayNum === 3;
           const isDay21 = day.getDate() === 21; // Check if it's the 21st day
@@ -962,26 +962,28 @@ const Calendar = () => {
           return (
             <div
               key={day.toString()}
-              className={`bg-card p-2 min-h-24 ${
-                isDay21 ? 'bg-rose-50' : ''
+              className={`bg-card rounded-xl p-3 h-36 shadow-sm border border-border/50 hover:shadow-md transition-shadow ${
+                isDay21 ? 'bg-rose-50 border-rose-200' : ''
               }`}
             >
-              <div className="text-sm font-medium mb-1">{format(day, 'd')}</div>
+              <div className="text-sm font-semibold mb-2 text-foreground">{format(day, 'd')}</div>
               
-              {displayClasses.map((cls) => (
-                <div
-                  key={cls.id}
-                  className={`${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-300" : "bg-rose-100 text-rose-700 border border-rose-300"} p-1 text-xs rounded mb-1 truncate cursor-pointer hover:opacity-80 transition-opacity`}
-                  onClick={() => handleClassClick(cls)}
-                >
-                  <div className="font-medium">{cls.student}</div>
-                  <div>{cls.startTime} - {cls.endTime}</div>
-                </div>
-              ))}
+              <div className="space-y-1.5">
+                {displayClasses.map((cls) => (
+                  <div
+                    key={cls.id}
+                    className={`${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"} p-2 text-xs rounded-md cursor-pointer hover:shadow-sm transition-all duration-200 hover:scale-[1.02]`}
+                    onClick={() => handleClassClick(cls)}
+                  >
+                    <div className="font-medium truncate">{cls.student}</div>
+                    <div className="text-xs opacity-80">{cls.startTime} - {cls.endTime}</div>
+                  </div>
+                ))}
+              </div>
               
               {/* Show "+X more" message if there are additional classes */}
               {remainingCount > 0 && (
-                <div className="text-xs font-medium text-muted-foreground mt-1 text-center bg-muted py-0.5 rounded">
+                <div className="text-xs font-medium text-muted-foreground mt-2 text-center bg-muted/50 py-1 px-2 rounded-md border border-border/30">
                   +{remainingCount} more
                 </div>
               )}
@@ -991,7 +993,7 @@ const Calendar = () => {
         
         {/* Empty cells for days of next month */}
         {Array.from({ length: (7 - ((monthDays.length + monthStart.getDay()) % 7)) % 7 }).map((_, index) => (
-          <div key={`empty-end-${index}`} className="bg-card p-2 min-h-24"></div>
+          <div key={`empty-end-${index}`} className="bg-card/50 rounded-xl p-3 h-36 shadow-sm border border-border/50"></div>
         ))}
       </div>
     </div>
@@ -1012,51 +1014,53 @@ const Calendar = () => {
         </div>
       </div>
       
-      <div className="flex border rounded">
+      <div className="flex bg-background p-3 rounded-xl shadow-sm border border-border/50">
         {/* Time column */}
-        <div className="w-20 border-r bg-[#f9f9f9]">
-          <div className="h-14"></div> {/* Empty header cell with increased height */}
+        <div className="w-20 border-r border-border/30 bg-muted/30 rounded-l-lg">
+          <div className="h-14 rounded-tl-lg bg-muted/50 border-b border-border/30"></div> {/* Empty header cell with increased height */}
           {timeSlots.map((time) => (
-            <div key={time} className="h-16 flex items-center justify-center text-sm border-t">
+            <div key={time} className="h-16 flex items-center justify-center text-sm border-t border-border/30 font-medium text-muted-foreground">
               {time}
             </div>
           ))}
         </div>
         
         {/* Week days */}
-        <div className="flex-1 grid grid-cols-7">
+        <div className="flex-1 grid grid-cols-7 gap-px bg-border/20 rounded-r-lg overflow-hidden">
           {/* Day headers */}
-          <div className="col-span-7 grid grid-cols-7 divide-x bg-[#f9f9f9]">
-            {weekDays.map((day) => {
+          <div className="col-span-7 grid grid-cols-7 gap-px bg-border/20">
+            {weekDays.map((day, index) => {
               const dayNum = day.getDay(); // 0 = Sunday, 3 = Wednesday
               const isWednesday = dayNum === 3;
               
               return (
                 <div 
                   key={day.toString()} 
-                  className={`text-center py-3 px-2 font-medium h-14 flex flex-col justify-center ${isWednesday ? 'bg-rose-50' : ''}`}
+                  className={`text-center py-3 px-2 font-medium h-14 flex flex-col justify-center ${
+                    isWednesday ? 'bg-rose-50/80' : 'bg-muted/30'
+                  } ${index === 0 ? '' : ''} ${index === 6 ? 'rounded-tr-lg' : ''}`}
                 >
-                  <div className="text-sm">{format(day, 'EEE')}</div>
-                  <div className="text-base">{format(day, 'd')}</div>
+                  <div className="text-sm font-medium text-muted-foreground">{format(day, 'EEE')}</div>
+                  <div className="text-base font-semibold">{format(day, 'd')}</div>
                 </div>
               );
             })}
           </div>
           
           {/* Time grid */}
-          <div className="col-span-7 grid grid-cols-7 divide-x">
-            {weekDays.map((day) => {
+          <div className="col-span-7 grid grid-cols-7 gap-px bg-border/20">
+            {weekDays.map((day, dayIndex) => {
               const dayClasses = getClassesForDay(day);
               const dayNum = day.getDay(); // 0 = Sunday, 3 = Wednesday
               const isWednesday = dayNum === 3;
               
               return (
-                <div key={day.toString()} className={`relative ${isWednesday ? 'bg-rose-50' : 'bg-white'}`}>
+                <div key={day.toString()} className={`relative ${isWednesday ? 'bg-rose-50/30' : 'bg-background'} ${dayIndex === 6 ? 'rounded-br-lg overflow-hidden' : ''}`}>
                   {/* Time slot rows - just for the grid */}
-                  {timeSlots.map((time) => (
+                  {timeSlots.map((time, timeIndex) => (
                     <div 
                       key={`${day}-${time}`} 
-                      className="h-16 border-t"
+                      className={`h-16 border-t border-border/20 ${timeIndex === timeSlots.length - 1 && dayIndex === 6 ? 'rounded-br-lg' : ''}`}
                     />
                   ))}
                   
@@ -1066,13 +1070,15 @@ const Calendar = () => {
                     const topPosition = (startHour - 8) * 64; // 8 is first hour, 64px per hour (16px * 4)
                     const height = Math.max(duration * 64, 64); // Ensure at least one hour height
                     
-                    // Choose background color based on class type - always use rose for all classes as in picture
-                    const bgColor = "bg-rose-100 border border-rose-300";
+                    // Use different colors based on class type like in monthly view
+                    const bgColor = cls.type === "Theory" 
+                      ? "bg-blue-100 text-blue-700 border border-blue-200" 
+                      : "bg-rose-100 text-rose-700 border border-rose-200";
                     
                     return (
                       <div
                         key={cls.id}
-                        className={`absolute inset-x-1 ${bgColor} p-2 rounded shadow-sm cursor-pointer hover:opacity-80 transition-opacity`}
+                        className={`absolute inset-x-2 ${bgColor} p-2 rounded-md cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.02]`}
                         style={{ 
                           top: `${topPosition + 2}px`, 
                           height: `${height - 4}px`,
@@ -1083,12 +1089,11 @@ const Calendar = () => {
                         onClick={() => handleClassClick(cls)}
                       >
                         <div>
-                          <div className="font-medium text-rose-700 text-xs">{cls.student}</div>
-                          <div className="text-xs text-rose-700">{cls.startTime} - {cls.endTime}</div>
+                          <div className="font-medium text-xs">{cls.student}</div>
+                          <div className="text-xs opacity-80">{cls.startTime} - {cls.endTime}</div>
                         </div>
-                        <div className="flex items-center text-xs text-rose-700">
-                          <Phone className="h-3 w-3 mr-1" />
-                          <span className="whitespace-nowrap">{cls.phone}</span>
+                        <div className="flex items-center text-xs opacity-80">
+                          <span className="whitespace-nowrap overflow-hidden text-ellipsis">{cls.phone}</span>
                         </div>
                       </div>
                     );
