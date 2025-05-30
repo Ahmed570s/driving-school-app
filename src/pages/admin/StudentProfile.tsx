@@ -342,7 +342,7 @@ const StudentProfile = ({
       </div>
 
       {/* Actions Row */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 my-6">
         <Button variant="outline">
           <Upload className="mr-2 h-4 w-4" />
           Upload Documents
