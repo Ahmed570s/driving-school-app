@@ -15,6 +15,7 @@ import InstructorsSection from "./Instructors";
 import GroupsSection from "./Groups";
 import ReceiptsSection from "./Receipts";
 import CertificatesSection from "./Certificates";
+import StudentProfile from "./StudentProfile";
 
 const Admin = () => {
   const {
@@ -23,6 +24,7 @@ const Admin = () => {
   } = useAuth();
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState("dashboard");
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
   // Protect route - redirect if not admin
   useState(() => {
@@ -54,10 +56,22 @@ const Admin = () => {
     });
   };
   
+  // Function to handle student profile navigation
+  const navigateToStudentProfile = (studentId: string) => {
+    setSelectedStudentId(studentId);
+    setActiveSection("student-profile");
+  };
+
+  // Function to navigate back from student profile
+  const navigateBackFromStudentProfile = () => {
+    setSelectedStudentId(null);
+    setActiveSection("students");
+  };
+  
   const renderActiveSection = () => {
     switch (activeSection) {
       case "students":
-        return <StudentsSection />;
+        return <StudentsSection onNavigateToStudentProfile={navigateToStudentProfile} />;
       case "instructors":
         return <InstructorsSection />;
       case "settings":
@@ -72,6 +86,8 @@ const Admin = () => {
         return <ReceiptsSection />;
       case "certificates":
         return <CertificatesSection />;
+      case "student-profile":
+        return <StudentProfile studentId={selectedStudentId} onBack={navigateBackFromStudentProfile} />;
       case "dashboard":
       default:
         return (

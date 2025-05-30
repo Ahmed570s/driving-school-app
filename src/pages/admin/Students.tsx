@@ -139,7 +139,7 @@ interface Filters {
 }
 
 // Students page component
-const Students = () => {
+const Students = ({ onNavigateToStudentProfile }: { onNavigateToStudentProfile?: (studentId: string) => void }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -589,7 +589,13 @@ const Students = () => {
               {/* Action buttons */}
               <div className="mt-6 space-y-2">
                 <Button className="w-full">Edit Student</Button>
-                <Button variant="outline" className="w-full">View Full Profile</Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => onNavigateToStudentProfile?.(selectedStudent.id)}
+                >
+                  View Full Profile
+                </Button>
               </div>
             </>
           )}
