@@ -1361,17 +1361,16 @@ const Calendar = () => {
       <Card>
         <CardContent className="p-6">
           <div className="space-y-4">
-            {/* Instructor Tabs */}
+            {/* Instructor Tabs with View Toggle */}
             <Tabs defaultValue="Mike Brown" onValueChange={setInstructor}>
-              <TabsList className="mb-4">
-                <TabsTrigger value="Mike Brown">Mike Brown</TabsTrigger>
-                <TabsTrigger value="Lisa Taylor">Lisa Taylor</TabsTrigger>
-                <TabsTrigger value="James Wilson">James Wilson</TabsTrigger>
-              </TabsList>
-              
-              {/* View Mode Toggle */}
-              <div className="flex justify-between items-center">
-                <h2 className="text-lg font-medium">{instructor}'s Schedule</h2>
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
+                <TabsList>
+                  <TabsTrigger value="Mike Brown">Mike Brown</TabsTrigger>
+                  <TabsTrigger value="Lisa Taylor">Lisa Taylor</TabsTrigger>
+                  <TabsTrigger value="James Wilson">James Wilson</TabsTrigger>
+                </TabsList>
+                
+                {/* View Mode Toggle */}
                 <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value)}>
                   <ToggleGroupItem value="month" aria-label="Month view">Month</ToggleGroupItem>
                   <ToggleGroupItem value="week" aria-label="Week view">Week</ToggleGroupItem>
