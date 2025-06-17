@@ -608,7 +608,11 @@ const Admin = () => {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Instructors">
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={activeSection === "instructors"} 
+                    tooltip="Instructors"
+                  >
                     <button onClick={() => setActiveSection("instructors")}>
                       <UserRound size={20} />
                       <span>Instructors</span>
@@ -616,7 +620,11 @@ const Admin = () => {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Calendar">
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={activeSection === "calendar"} 
+                    tooltip="Calendar"
+                  >
                     <button onClick={() => setActiveSection("calendar")}>
                       <Calendar size={20} />
                       <span>Calendar</span>
@@ -624,7 +632,11 @@ const Admin = () => {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Activity Logs">
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={activeSection === "activity-logs"} 
+                    tooltip="Activity Logs"
+                  >
                     <button onClick={() => setActiveSection("activity-logs")}>
                       <FileText size={20} />
                       <span>Activity Logs</span>
@@ -668,7 +680,11 @@ const Admin = () => {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Settings">
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={activeSection === "settings"} 
+                    tooltip="Settings"
+                  >
                     <button onClick={() => setActiveSection("settings")}>
                       <Settings size={20} />
                       <span>Settings</span>
