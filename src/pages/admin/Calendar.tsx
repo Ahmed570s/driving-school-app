@@ -763,6 +763,7 @@ const dummyClasses: ClassItem[] = [
 const Calendar = () => {
   // Set default date to May 2025
   const [currentMonth, setCurrentMonth] = useState(new Date(2025, 4, 1)); // Month is 0-indexed, so 4 = May
+  const [selectedDay, setSelectedDay] = useState(new Date(2025, 4, 21)); // May 21, 2025 for day view
   const [instructor, setInstructor] = useState("Mike Brown");
   const [viewMode, setViewMode] = useState("month");
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
@@ -790,6 +791,8 @@ const Calendar = () => {
   // Navigation functions
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  const prevDay = () => setSelectedDay(addDays(selectedDay, -1));
+  const nextDay = () => setSelectedDay(addDays(selectedDay, 1));
   
   // Filter classes by instructor
   const instructorClasses = dummyClasses.filter(cls => cls.instructor === instructor);
@@ -947,7 +950,7 @@ const Calendar = () => {
         
         {/* Empty cells for days of previous month */}
         {Array.from({ length: monthStart.getDay() }).map((_, index) => (
-          <div key={`empty-start-${index}`} className="bg-card/50 rounded-xl p-3 h-36 shadow-sm border border-border/50"></div>
+          <div key={`empty-start-${index}`} className="bg-card/50 rounded-xl p-2.5 h-28 shadow-sm border border-border/50"></div>
         ))}
         
         {/* Calendar days */}
@@ -962,28 +965,27 @@ const Calendar = () => {
           return (
             <div
               key={day.toString()}
-              className={`bg-card rounded-xl p-3 h-36 shadow-sm border border-border/50 hover:shadow-md transition-shadow ${
+              className={`bg-card rounded-xl p-2.5 h-28 shadow-sm border border-border/50 hover:shadow-md transition-shadow ${
                 isDay21 ? 'bg-rose-50 border-rose-200' : ''
               }`}
             >
-              <div className="text-sm font-semibold mb-2 text-foreground">{format(day, 'd')}</div>
+              <div className="text-sm font-semibold mb-1 text-foreground">{format(day, 'd')}</div>
               
-              <div className="space-y-1.5">
+              <div className="space-y-1">
               {displayClasses.map((cls) => (
                 <div
                   key={cls.id}
-                    className={`${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"} p-2 text-xs rounded-md cursor-pointer hover:shadow-sm transition-all duration-200 hover:scale-[1.02]`}
+                    className={`${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"} px-2 py-1.5 text-xs rounded-md cursor-pointer hover:shadow-sm transition-all duration-200 hover:scale-[1.02] flex items-center`}
                   onClick={() => handleClassClick(cls)}
                 >
                     <div className="font-medium truncate">{cls.student}</div>
-                    <div className="text-xs opacity-80">{cls.startTime} - {cls.endTime}</div>
                 </div>
               ))}
               </div>
               
               {/* Show "+X more" message if there are additional classes */}
               {remainingCount > 0 && (
-                <div className="text-xs font-medium text-muted-foreground mt-2 text-center bg-muted/50 py-1 px-2 rounded-md border border-border/30">
+                <div className="text-xs font-medium text-muted-foreground mt-1 text-center bg-muted/50 py-0.5 px-2 rounded-md border border-border/30">
                   +{remainingCount} more
                 </div>
               )}
@@ -993,7 +995,7 @@ const Calendar = () => {
         
         {/* Empty cells for days of next month */}
         {Array.from({ length: (7 - ((monthDays.length + monthStart.getDay()) % 7)) % 7 }).map((_, index) => (
-          <div key={`empty-end-${index}`} className="bg-card/50 rounded-xl p-3 h-36 shadow-sm border border-border/50"></div>
+          <div key={`empty-end-${index}`} className="bg-card/50 rounded-xl p-2.5 h-28 shadow-sm border border-border/50"></div>
         ))}
       </div>
     </div>
@@ -1014,87 +1016,70 @@ const Calendar = () => {
         </div>
       </div>
       
-      <div className="flex bg-background p-3 rounded-xl shadow-sm border border-border/50">
-        {/* Time column */}
-        <div className="w-20 border-r border-border/30 bg-muted/30 rounded-l-lg">
-          <div className="h-14 rounded-tl-lg bg-muted/50 border-b border-border/30"></div> {/* Empty header cell with increased height */}
-          {timeSlots.map((time) => (
-            <div key={time} className="h-16 flex items-center justify-center text-sm border-t border-border/30 font-medium text-muted-foreground">
-              {time}
-            </div>
-          ))}
+      <div className="bg-background rounded-xl shadow-sm border border-border/50 p-3">
+        {/* Headers row */}
+        <div className="flex mb-3">
+          {/* Empty corner for time column */}
+          <div className="w-20 mr-3"></div>
+          {/* Day headers */}
+          <div className="flex-1 grid grid-cols-7 gap-3">
+            {weekDays.map((day, index) => (
+              <div 
+                key={day.toString()} 
+                className="text-center py-3 font-medium text-muted-foreground bg-muted rounded-lg"
+              >
+                <div className="text-sm font-medium text-muted-foreground">{format(day, 'EEE')}</div>
+                <div className="text-base font-semibold">{format(day, 'd')}</div>
+              </div>
+            ))}
+          </div>
         </div>
         
-        {/* Week days */}
-        <div className="flex-1 grid grid-cols-7 gap-px bg-border/20 rounded-r-lg overflow-hidden">
-          {/* Day headers */}
-          <div className="col-span-7 grid grid-cols-7 gap-px bg-border/20">
-            {weekDays.map((day, index) => {
-              const dayNum = day.getDay(); // 0 = Sunday, 3 = Wednesday
-              const isWednesday = dayNum === 3;
-              
-              return (
-                <div 
-                  key={day.toString()} 
-                  className={`text-center py-3 px-2 font-medium h-14 flex flex-col justify-center ${
-                    isWednesday ? 'bg-rose-50/80' : 'bg-muted/30'
-                  } ${index === 0 ? '' : ''} ${index === 6 ? 'rounded-tr-lg' : ''}`}
-                >
-                  <div className="text-sm font-medium text-muted-foreground">{format(day, 'EEE')}</div>
-                  <div className="text-base font-semibold">{format(day, 'd')}</div>
-                </div>
-              );
-            })}
+        {/* Calendar grid */}
+        <div className="flex">
+          {/* Time column */}
+          <div className="w-20 mr-3 bg-muted rounded-lg">
+            {timeSlots.map((time, index) => (
+              <div 
+                key={time} 
+                className="h-10 flex items-center justify-center text-sm font-medium text-muted-foreground"
+              >
+                {time}
+              </div>
+            ))}
           </div>
           
-          {/* Time grid */}
-          <div className="col-span-7 grid grid-cols-7 gap-px bg-border/20">
+          {/* Day columns */}
+          <div className="flex-1 grid grid-cols-7 gap-3">
             {weekDays.map((day, dayIndex) => {
               const dayClasses = getClassesForDay(day);
-              const dayNum = day.getDay(); // 0 = Sunday, 3 = Wednesday
-              const isWednesday = dayNum === 3;
               
               return (
-                <div key={day.toString()} className={`relative ${isWednesday ? 'bg-rose-50/30' : 'bg-background'} ${dayIndex === 6 ? 'rounded-br-lg overflow-hidden' : ''}`}>
-                  {/* Time slot rows - just for the grid */}
+                <div key={day.toString()} className="relative bg-card rounded-xl shadow-sm border border-border/50">
+                  {/* Time slot grid */}
                   {timeSlots.map((time, timeIndex) => (
                     <div 
                       key={`${day}-${time}`} 
-                      className={`h-16 border-t border-border/20 ${timeIndex === timeSlots.length - 1 && dayIndex === 6 ? 'rounded-br-lg' : ''}`}
+                      className="h-10 border-t border-border/20 first:border-t-0"
                     />
                   ))}
                   
-                  {/* Render classes as absolute positioned blocks */}
+                  {/* Class cards */}
                   {dayClasses.map((cls) => {
-                    const { startHour, duration } = getClassPositionData(cls);
-                    const topPosition = (startHour - 8) * 64; // 8 is first hour, 64px per hour (16px * 4)
-                    const height = Math.max(duration * 64, 64); // Ensure at least one hour height
-                    
-                    // Use different colors based on class type like in monthly view
-                    const bgColor = cls.type === "Theory" 
-                      ? "bg-blue-100 text-blue-700 border border-blue-200" 
-                      : "bg-rose-100 text-rose-700 border border-rose-200";
+                    const { startHour } = getClassPositionData(cls);
+                    const slotIndex = startHour - 8; // 8 is first hour (8:00)
+                    const topPosition = slotIndex * 40; // 40px per slot (h-10)
                     
                     return (
                       <div
                         key={cls.id}
-                        className={`absolute inset-x-2 ${bgColor} p-2 rounded-md cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.02]`}
+                        className={`absolute left-1 right-1 ${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"} p-2 rounded-md cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.02] flex items-center h-8`}
                         style={{ 
-                          top: `${topPosition + 2}px`, 
-                          height: `${height - 4}px`,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
+                          top: `${topPosition + 4}px`, // 4px offset for centering in 40px slot
                         }}
                         onClick={() => handleClassClick(cls)}
                       >
-                        <div>
-                          <div className="font-medium text-xs">{cls.student}</div>
-                          <div className="text-xs opacity-80">{cls.startTime} - {cls.endTime}</div>
-                        </div>
-                        <div className="flex items-center text-xs opacity-80">
-                          <span className="whitespace-nowrap overflow-hidden text-ellipsis">{cls.phone}</span>
-                        </div>
+                        <div className="font-medium text-xs truncate">{cls.student}</div>
                       </div>
                     );
                   })}
@@ -1106,6 +1091,97 @@ const Calendar = () => {
       </div>
     </div>
   );
+  
+  // Render day view calendar
+  const renderDayView = () => {
+    const dayClasses = getClassesForDay(selectedDay);
+    const sortedClasses = dayClasses.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    
+    return (
+      <div className="mt-4">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">{format(selectedDay, 'EEEE, MMMM d, yyyy')}</h2>
+          <div className="flex space-x-2">
+            <Button variant="outline" size="icon" onClick={prevDay}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={nextDay}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        
+        <div className="space-y-4">
+          {sortedClasses.length === 0 ? (
+            <div className="text-center py-12">
+              <CalendarIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium text-muted-foreground mb-2">No classes scheduled</h3>
+              <p className="text-sm text-muted-foreground">There are no classes scheduled for this day.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {sortedClasses.map((cls) => (
+                <Card 
+                  key={cls.id} 
+                  className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.01]"
+                  onClick={() => handleClassClick(cls)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-3">
+                          <Badge 
+                            variant={cls.type === "Theory" ? "default" : "secondary"}
+                            className={cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"}
+                          >
+                            {cls.type}
+                          </Badge>
+                          <span className="text-lg font-semibold">{cls.className}</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="flex items-center space-x-2">
+                            <UserRound className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-medium">{cls.student}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">{cls.group}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Clock className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">{cls.startTime} - {cls.endTime}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Phone className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">{cls.phone}</span>
+                          </div>
+                        </div>
+                        
+                        {cls.notes && (
+                          <div className="mt-3 p-3 bg-muted/50 rounded-md">
+                            <div className="flex items-start space-x-2">
+                              <Bookmark className="h-4 w-4 text-muted-foreground mt-0.5" />
+                              <p className="text-sm text-muted-foreground">{cls.notes}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-foreground">{cls.startTime}</div>
+                        <div className="text-sm text-muted-foreground">{cls.duration}</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
   
   return (
     <PageLayout>
@@ -1299,11 +1375,12 @@ const Calendar = () => {
                 <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value)}>
                   <ToggleGroupItem value="month" aria-label="Month view">Month</ToggleGroupItem>
                   <ToggleGroupItem value="week" aria-label="Week view">Week</ToggleGroupItem>
+                  <ToggleGroupItem value="day" aria-label="Day view">Day</ToggleGroupItem>
                 </ToggleGroup>
               </div>
               
               {/* Calendar View */}
-              {viewMode === "month" ? renderMonthView() : renderWeekView()}
+              {viewMode === "month" ? renderMonthView() : viewMode === "week" ? renderWeekView() : renderDayView()}
             </Tabs>
           </div>
         </CardContent>

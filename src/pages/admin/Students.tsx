@@ -152,10 +152,10 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
     if (onNavigateToCreateStudent) {
       onNavigateToCreateStudent();
     } else {
-      toast({
+    toast({
         title: "Navigation Error",
         description: "Unable to navigate to create student page."
-      });
+    });
     }
   };
   
