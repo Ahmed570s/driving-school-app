@@ -794,6 +794,11 @@ const Calendar = () => {
   const prevDay = () => setSelectedDay(addDays(selectedDay, -1));
   const nextDay = () => setSelectedDay(addDays(selectedDay, 1));
   
+  // Weekly navigation functions
+  const [currentWeekStart, setCurrentWeekStart] = useState(new Date(2025, 4, 18)); // May 18, 2025
+  const prevWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
+  const nextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
+  
   // Filter classes by instructor
   const instructorClasses = dummyClasses.filter(cls => cls.instructor === instructor);
   
@@ -895,7 +900,7 @@ const Calendar = () => {
   };
   
   // Generate weekly view days (current week)
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(new Date(2025, 4, 18), i)); // Start from May 18, 2025
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
   
   // Time slots for weekly view (8:00 AM to 8:00 PM in 1-hour steps)
   const timeSlots = Array.from({ length: 13 }, (_, i) => `${i + 8}:00`);
@@ -1007,10 +1012,10 @@ const Calendar = () => {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">Week of {format(weekDays[0], 'MMM d')} - {format(weekDays[6], 'MMM d, yyyy')}</h2>
         <div className="flex space-x-2">
-          <Button variant="outline" size="icon">
+          <Button variant="outline" size="icon" onClick={prevWeek}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="icon">
+          <Button variant="outline" size="icon" onClick={nextWeek}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -1026,7 +1031,9 @@ const Calendar = () => {
             {weekDays.map((day, index) => (
               <div 
                 key={day.toString()} 
-                className="text-center py-3 font-medium text-muted-foreground bg-muted rounded-lg"
+                className={`text-center py-3 font-medium text-muted-foreground rounded-lg ${
+                  isToday(day) ? 'bg-rose-50 border border-rose-200' : 'bg-muted'
+                }`}
               >
                 <div className="text-sm font-medium text-muted-foreground">{format(day, 'EEE')}</div>
                 <div className="text-base font-semibold">{format(day, 'd')}</div>
@@ -1055,7 +1062,14 @@ const Calendar = () => {
               const dayClasses = getClassesForDay(day);
               
               return (
-                <div key={day.toString()} className="relative bg-card rounded-xl shadow-sm border border-border/50">
+                <div 
+                  key={day.toString()} 
+                  className={`relative rounded-xl shadow-sm border ${
+                    isToday(day) 
+                      ? 'bg-rose-50 border-rose-200' 
+                      : 'bg-card border-border/50'
+                  }`}
+                >
                   {/* Time slot grid */}
                   {timeSlots.map((time, timeIndex) => (
                     <div 
@@ -1097,6 +1111,12 @@ const Calendar = () => {
     const dayClasses = getClassesForDay(selectedDay);
     const sortedClasses = dayClasses.sort((a, b) => a.startTime.localeCompare(b.startTime));
     
+    // Get calendar month for the selected day
+    const calendarMonth = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), 1);
+    const calendarMonthStart = startOfMonth(calendarMonth);
+    const calendarMonthEnd = endOfMonth(calendarMonth);
+    const calendarMonthDays = eachDayOfInterval({ start: calendarMonthStart, end: calendarMonthEnd });
+    
     return (
       <div className="mt-4">
         <div className="flex justify-between items-center mb-4">
@@ -1111,73 +1131,166 @@ const Calendar = () => {
           </div>
         </div>
         
-        <div className="space-y-4">
-          {sortedClasses.length === 0 ? (
-            <div className="text-center py-12">
-              <CalendarIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium text-muted-foreground mb-2">No classes scheduled</h3>
-              <p className="text-sm text-muted-foreground">There are no classes scheduled for this day.</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              {sortedClasses.map((cls) => (
-                <Card 
-                  key={cls.id} 
-                  className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.01]"
-                  onClick={() => handleClassClick(cls)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-3">
-                          <Badge 
-                            variant={cls.type === "Theory" ? "default" : "secondary"}
-                            className={cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"}
-                          >
-                            {cls.type}
-                          </Badge>
-                          <span className="text-lg font-semibold">{cls.className}</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="flex items-center space-x-2">
-                            <UserRound className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">{cls.student}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Classes List - Left side */}
+          <div className="lg:col-span-2 space-y-4">
+            {sortedClasses.length === 0 ? (
+              <div className="text-center py-12">
+                <CalendarIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium text-muted-foreground mb-2">No classes scheduled</h3>
+                <p className="text-sm text-muted-foreground">There are no classes scheduled for this day.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {sortedClasses.map((cls) => (
+                  <Card 
+                    key={cls.id} 
+                    className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.01]"
+                    onClick={() => handleClassClick(cls)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-3">
+                            <Badge 
+                              variant={cls.type === "Theory" ? "default" : "secondary"}
+                              className={cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"}
+                            >
+                              {cls.type}
+                            </Badge>
+                            <span className="text-lg font-semibold">{cls.className}</span>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">{cls.group}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">{cls.startTime} - {cls.endTime}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Phone className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">{cls.phone}</span>
-                          </div>
-                        </div>
-                        
-                        {cls.notes && (
-                          <div className="mt-3 p-3 bg-muted/50 rounded-md">
-                            <div className="flex items-start space-x-2">
-                              <Bookmark className="h-4 w-4 text-muted-foreground mt-0.5" />
-                              <p className="text-sm text-muted-foreground">{cls.notes}</p>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex items-center space-x-2">
+                              <UserRound className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm font-medium">{cls.student}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Users className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">{cls.group}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">{cls.startTime} - {cls.endTime}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Phone className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">{cls.phone}</span>
                             </div>
                           </div>
-                        )}
+                          
+                          {cls.notes && (
+                            <div className="mt-3 p-3 bg-muted/50 rounded-md">
+                              <div className="flex items-start space-x-2">
+                                <Bookmark className="h-4 w-4 text-muted-foreground mt-0.5" />
+                                <p className="text-sm text-muted-foreground">{cls.notes}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-foreground">{cls.startTime}</div>
+                          <div className="text-sm text-muted-foreground">{cls.duration}</div>
+                        </div>
                       </div>
-                      
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-foreground">{cls.startTime}</div>
-                        <div className="text-sm text-muted-foreground">{cls.duration}</div>
-                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Mini Calendar - Right side */}
+          <div className="lg:col-span-1">
+            <Card className="bg-background shadow-sm border border-border/50">
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-lg font-semibold">
+                    {format(calendarMonth, 'MMMM yyyy')}
+                  </CardTitle>
+                  <div className="flex space-x-1">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedDay(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, selectedDay.getDate()))}
+                    >
+                      <ChevronLeft className="h-3 w-3" />
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedDay(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, selectedDay.getDate()))}
+                    >
+                      <ChevronRight className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-3">
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Days of week headers */}
+                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day) => (
+                    <div key={day} className="text-center py-2 text-xs font-medium text-muted-foreground">
+                      {day}
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+                  ))}
+                  
+                  {/* Empty cells for days of previous month */}
+                  {Array.from({ length: calendarMonthStart.getDay() }).map((_, index) => (
+                    <div key={`empty-start-${index}`} className="h-8"></div>
+                  ))}
+                  
+                  {/* Calendar days */}
+                  {calendarMonthDays.map((day) => {
+                    const dayClasses = getClassesForDay(day);
+                    const isSelected = format(day, 'yyyy-MM-dd') === format(selectedDay, 'yyyy-MM-dd');
+                    const hasClasses = dayClasses.length > 0;
+                    
+                    return (
+                      <button
+                        key={day.toString()}
+                        onClick={() => setSelectedDay(day)}
+                        className={`h-8 w-8 text-xs rounded-md border transition-all duration-200 hover:shadow-sm ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                            : isToday(day)
+                            ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                            : hasClasses
+                            ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'
+                            : 'bg-card border-border/50 hover:bg-muted/50'
+                        }`}
+                      >
+                        {format(day, 'd')}
+                      </button>
+                    );
+                  })}
+                  
+                  {/* Empty cells for days of next month */}
+                  {Array.from({ length: (7 - ((calendarMonthDays.length + calendarMonthStart.getDay()) % 7)) % 7 }).map((_, index) => (
+                    <div key={`empty-end-${index}`} className="h-8"></div>
+                  ))}
+                </div>
+                
+                {/* Legend */}
+                <div className="mt-4 space-y-2 text-xs">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-primary rounded-sm"></div>
+                    <span className="text-muted-foreground">Selected</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-rose-100 border border-rose-200 rounded-sm"></div>
+                    <span className="text-muted-foreground">Today</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-blue-100 border border-blue-200 rounded-sm"></div>
+                    <span className="text-muted-foreground">Has classes</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     );
