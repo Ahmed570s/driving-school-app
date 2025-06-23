@@ -349,7 +349,7 @@ const CheckIn = () => {
           </DialogHeader>
           
           {selectedClass && (
-            <div className="px-6 space-y-6">
+            <div className={`px-6 space-y-6 ${showMissedNote ? 'pb-8' : ''}`}>
               {/* Class Information */}
               <div className="bg-muted/50 rounded-lg p-4">
                 <div className="grid grid-cols-2 gap-4">
