@@ -223,7 +223,16 @@ const StudentProfile = ({
 
   const handleStudentFieldChange = (field: keyof Student, value: string) => {
     if (editedStudent) {
-      setEditedStudent({ ...editedStudent, [field]: value });
+      const updated = { ...editedStudent, [field]: value };
+      
+      // Auto-calculate contract expiry date when enrollment date changes
+      if (field === 'enrollmentDate' && value) {
+        const enrollmentDate = new Date(value);
+        enrollmentDate.setMonth(enrollmentDate.getMonth() + 18);
+        updated.contractExpiryDate = enrollmentDate.toISOString().split('T')[0];
+      }
+      
+      setEditedStudent(updated);
     }
   };
 
@@ -490,6 +499,13 @@ const StudentProfile = ({
                       ) : (
                         <p>{format(new Date(student.enrollmentDate), 'MMM d, yyyy')}</p>
                       )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1">
+                      <Label className="text-sm font-medium text-muted-foreground">Contract Expiry Date</Label>
+                      <p>{format(new Date(student.contractExpiryDate), 'MMM d, yyyy')}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

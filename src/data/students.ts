@@ -35,6 +35,7 @@ export interface Student {
   currentPhase: 1 | 2 | 3 | 4;
   totalCompletedSessions: number;
   enrollmentDate: string;
+  contractExpiryDate: string;
   needsSupport: boolean;
   attendanceIssues: boolean;
   documents: Document[];
@@ -142,6 +143,13 @@ export const studentsListData: BasicStudent[] = [
   }
 ];
 
+// Helper function to calculate contract expiry date (18 months after enrollment)
+const calculateContractExpiryDate = (enrollmentDate: string): string => {
+  const enrollmentDateObj = new Date(enrollmentDate);
+  enrollmentDateObj.setMonth(enrollmentDateObj.getMonth() + 18);
+  return enrollmentDateObj.toISOString().split('T')[0];
+};
+
 // Detailed student data for profiles
 export const studentProfilesData: Record<string, Student> = {
   "1": {
@@ -163,6 +171,7 @@ export const studentProfilesData: Record<string, Student> = {
     currentPhase: 2,
     totalCompletedSessions: 10,
     enrollmentDate: "2024-01-15",
+    contractExpiryDate: "2025-07-15",
     needsSupport: false,
     attendanceIssues: false,
     documents: [
@@ -212,6 +221,7 @@ export const studentProfilesData: Record<string, Student> = {
     currentPhase: 1,
     totalCompletedSessions: 3,
     enrollmentDate: "2024-02-01",
+    contractExpiryDate: "2025-08-01",
     needsSupport: true,
     attendanceIssues: false,
     documents: [
@@ -261,6 +271,7 @@ export const addNewStudent = (basicStudent: BasicStudent, formData?: any): void 
     currentPhase: 1,
     totalCompletedSessions: 0,
     enrollmentDate: new Date().toISOString().split('T')[0],
+    contractExpiryDate: calculateContractExpiryDate(new Date().toISOString().split('T')[0]),
     needsSupport: false,
     attendanceIssues: false,
     documents: []
@@ -292,6 +303,7 @@ export const createCompleteStudent = (partialStudent: any): Student => {
     currentPhase: partialStudent.currentPhase || 1,
     totalCompletedSessions: partialStudent.totalCompletedSessions || 0,
     enrollmentDate: partialStudent.enrollmentDate || today,
+    contractExpiryDate: partialStudent.contractExpiryDate || calculateContractExpiryDate(partialStudent.enrollmentDate || today),
     needsSupport: partialStudent.needsSupport || false,
     attendanceIssues: partialStudent.attendanceIssues || false,
     documents: partialStudent.documents || []
