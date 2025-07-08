@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { PageLayout } from "@/components/ui/page-layout";
 import { Button } from "@/components/ui/button";
-import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, UserRound, Calendar as CalendarIcon, Check, X, FileText, Download, CheckCircle, AlertCircle, PenTool, Signature, MoreVertical } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, UserRound, Calendar as CalendarIcon, Check, X, FileText, Download, CheckCircle, AlertCircle, PenTool, MoreVertical } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -299,6 +298,26 @@ const Agenda = () => {
     });
   };
 
+  // Handle undo completion
+  const handleUndoCompletion = (classId: number) => {
+    setClasses(prev => prev.map(cls => 
+      cls.id === classId 
+        ? { 
+            ...cls, 
+            isCompleted: false, 
+            isCheckedIn: false,
+            attendanceData: cls.type === "Theory" ? undefined : cls.attendanceData
+          }
+        : cls
+    ));
+    
+    const undoneClass = classes.find(cls => cls.id === classId);
+    toast({
+      title: "Class Completion Undone",
+      description: `${undoneClass?.className} has been reverted to incomplete status.`,
+    });
+  };
+
   // Calculate daily stats
   const calculateDailyStats = () => {
     const todayClasses = getClassesForDay();
@@ -418,7 +437,16 @@ const Agenda = () => {
                             ? "bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800"
                             : "hover:shadow-md hover:scale-[1.02]"
                         )}
-                        onClick={() => cls.type === "Theory" ? handleTheoryClassClick(cls) : null}
+                        onClick={() => {
+                          if (cls.isCompleted) {
+                            // For completed classes, allow undo
+                            handleUndoCompletion(cls.id);
+                          } else if (cls.type === "Theory") {
+                            handleTheoryClassClick(cls);
+                          } else if (cls.type === "Practical") {
+                            handleManualCompletion(cls);
+                          }
+                        }}
                       >
                         <CardContent className="p-4">
                           <div className="space-y-3">
@@ -461,6 +489,12 @@ const Agenda = () => {
                                         Manual Completion
                                       </DropdownMenuItem>
                                     )}
+                                    {cls.isCompleted && (
+                                      <DropdownMenuItem onClick={() => handleUndoCompletion(cls.id)}>
+                                        <X className="h-4 w-4 mr-2" />
+                                        Undo Completion
+                                      </DropdownMenuItem>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </div>
@@ -492,14 +526,7 @@ const Agenda = () => {
                               )}
                             </div>
                             
-                            {cls.isCompleted && cls.type === "Practical" && (
-                              <div className="flex items-center justify-center p-3 bg-green-100 dark:bg-green-900 rounded-md">
-                                <Signature className="h-5 w-5 text-green-600 mr-2" />
-                                <span className="text-sm font-medium text-green-700 dark:text-green-300">
-                                  Signed & Completed
-                                </span>
-                              </div>
-                            )}
+
                             
                             {cls.notes && (
                               <div className="p-2 bg-muted/50 rounded-md">
@@ -518,16 +545,16 @@ const Agenda = () => {
         </div>
 
         {/* Theory Class Attendance Modal */}
-        <Sheet open={attendanceModalOpen} onOpenChange={setAttendanceModalOpen}>
-          <SheetContent className="sm:max-w-[600px]">
-            <SheetHeader>
-              <SheetTitle>Class Attendance</SheetTitle>
-              <SheetDescription>
+        <Dialog open={attendanceModalOpen} onOpenChange={setAttendanceModalOpen}>
+          <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-hidden">
+            <DialogHeader>
+              <DialogTitle>Class Attendance</DialogTitle>
+              <DialogDescription>
                 {selectedClass?.className} - {selectedClass?.group}
-              </SheetDescription>
-            </SheetHeader>
+              </DialogDescription>
+            </DialogHeader>
             
-            <div className="mt-6 space-y-4">
+            <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Students</h3>
                 <div className="flex space-x-2">
@@ -579,13 +606,19 @@ const Agenda = () => {
                 <div className="text-sm text-muted-foreground">
                   Present: {studentAttendance.filter(s => s.isPresent).length} / {studentAttendance.length}
                 </div>
-                <Button onClick={saveAttendance} className="w-32">
-                  Save Attendance
-                </Button>
               </div>
             </div>
-          </SheetContent>
-        </Sheet>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAttendanceModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={saveAttendance}>
+                Save Attendance
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Manual Completion Modal */}
         <Dialog open={manualCompletionModalOpen} onOpenChange={setManualCompletionModalOpen}>
