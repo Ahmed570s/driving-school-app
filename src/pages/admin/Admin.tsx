@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import StudentsSection from "./Students";
 import SettingsSection from "./Settings";
 import CalendarView from "./Calendar";
+import AgendaView from "./Agenda";
 import ActivityLogsSection from "./ActivityLogs";
 import InstructorsSection from "./Instructors";
 import GroupsSection from "./Groups";
@@ -212,6 +213,8 @@ const Admin = () => {
         return <SettingsSection />;
       case "calendar":
         return <CalendarView />;
+      case "agenda":
+        return <AgendaView />;
       case "activity-logs":
         return <ActivityLogsSection />;
       case "groups":
@@ -628,6 +631,18 @@ const Admin = () => {
                     <button onClick={() => setActiveSection("calendar")}>
                       <Calendar size={20} />
                       <span>Calendar</span>
+                    </button>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={activeSection === "agenda"} 
+                    tooltip="Agenda"
+                  >
+                    <button onClick={() => setActiveSection("agenda")}>
+                      <Clock size={20} />
+                      <span>Agenda</span>
                     </button>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
