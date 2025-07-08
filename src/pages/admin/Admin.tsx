@@ -600,6 +600,30 @@ const Admin = () => {
                 <SidebarMenuItem>
                   <SidebarMenuButton 
                     asChild 
+                    isActive={activeSection === "agenda"} 
+                    tooltip="Agenda"
+                  >
+                    <button onClick={() => setActiveSection("agenda")}>
+                      <Clock size={20} />
+                      <span>Agenda</span>
+                    </button>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={activeSection === "calendar"} 
+                    tooltip="Calendar"
+                  >
+                    <button onClick={() => setActiveSection("calendar")}>
+                      <Calendar size={20} />
+                      <span>Calendar</span>
+                    </button>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton 
+                    asChild 
                     isActive={activeSection === "students"} 
                     tooltip="Students"
                     onClick={() => setActiveSection("students")}
@@ -619,30 +643,6 @@ const Admin = () => {
                     <button onClick={() => setActiveSection("instructors")}>
                       <UserRound size={20} />
                       <span>Instructors</span>
-                    </button>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton 
-                    asChild 
-                    isActive={activeSection === "calendar"} 
-                    tooltip="Calendar"
-                  >
-                    <button onClick={() => setActiveSection("calendar")}>
-                      <Calendar size={20} />
-                      <span>Calendar</span>
-                    </button>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton 
-                    asChild 
-                    isActive={activeSection === "agenda"} 
-                    tooltip="Agenda"
-                  >
-                    <button onClick={() => setActiveSection("agenda")}>
-                      <Clock size={20} />
-                      <span>Agenda</span>
                     </button>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
