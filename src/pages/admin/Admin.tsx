@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Activity, Calendar, FileText, LogOut, Plus, Receipt, UserRound, Users, Clock, Medal, Settings, Check, ChevronsUpDown } from "lucide-react";
+import { Activity, Calendar, FileText, LogOut, Plus, Receipt, UserRound, Users, Clock, Medal, Settings, Check, ChevronsUpDown, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarFooter, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarGroupLabel, SidebarGroup } from "@/components/ui/sidebar";
@@ -649,23 +649,11 @@ const Admin = () => {
                 <SidebarMenuItem>
                   <SidebarMenuButton 
                     asChild 
-                    isActive={activeSection === "activity-logs"} 
-                    tooltip="Activity Logs"
-                  >
-                    <button onClick={() => setActiveSection("activity-logs")}>
-                      <FileText size={20} />
-                      <span>Activity Logs</span>
-                    </button>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton 
-                    asChild 
                     isActive={activeSection === "groups"} 
                     tooltip="Groups"
                   >
                     <button onClick={() => setActiveSection("groups")}>
-                      <Users size={20} />
+                      <UsersRound size={20} />
                       <span>Groups</span>
                     </button>
                   </SidebarMenuButton>
@@ -691,6 +679,18 @@ const Admin = () => {
                     <button onClick={() => setActiveSection("certificates")}>
                       <Medal size={20} />
                       <span>Certificates</span>
+                    </button>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={activeSection === "activity-logs"} 
+                    tooltip="Activity Logs"
+                  >
+                    <button onClick={() => setActiveSection("activity-logs")}>
+                      <FileText size={20} />
+                      <span>Activity Logs</span>
                     </button>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
