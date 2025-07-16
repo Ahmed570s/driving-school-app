@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronDown, Filter, Plus, Search, X } from "lucide-react";
+import { Check, ChevronDown, Filter, Plus, Search, X, Info } from "lucide-react";
 import { useDebounce } from "@/hooks/use-debounce";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -168,6 +169,21 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
           Add New Student
         </Button>
       </div>
+      
+      <Card className="p-3 bg-blue-50 border-blue-200 mb-6">
+        <div className="flex items-start gap-2">
+          <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium text-blue-900">Student Profiles</h3>
+            <div className="text-xs text-blue-800 space-y-0.5">
+              <p>Only <strong>Emma Wilson</strong> and <strong>John Smith</strong> have full student profiles.</p>
+            </div>
+            <p className="text-xs text-blue-700">
+              Click on their names to view their complete profiles.
+            </p>
+          </div>
+        </div>
+      </Card>
       
       {/* Search and filters row */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
