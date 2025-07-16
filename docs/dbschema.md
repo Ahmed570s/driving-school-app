@@ -326,7 +326,6 @@ CREATE TABLE class_attendances (
   missed_reason TEXT,
   
   -- Performance
-  performance_rating INTEGER, -- 1-5 scale
   instructor_feedback TEXT,
   
   -- System Fields
@@ -334,8 +333,7 @@ CREATE TABLE class_attendances (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
   
   -- Constraints
-  CONSTRAINT unique_class_student UNIQUE(class_id, student_id),
-  CONSTRAINT valid_rating CHECK (performance_rating IS NULL OR (performance_rating >= 1 AND performance_rating <= 5))
+  CONSTRAINT unique_class_student UNIQUE(class_id, student_id)
 );
 ```
 
@@ -347,7 +345,7 @@ CREATE TABLE class_attendances (
 **Purpose**: Manage student documents and file attachments
 
 ```sql
-CREATE TYPE document_type AS ENUM ('id', 'medical', 'insurance', 'license', 'permit', 'other');
+CREATE TYPE document_type AS ENUM ('id', 'medical', 'insurance', 'license', 'permit', 'contract' , 'receipt' , 'test' , 'other');
 CREATE TYPE document_status AS ENUM ('pending', 'approved', 'rejected', 'expired');
 
 CREATE TABLE documents (

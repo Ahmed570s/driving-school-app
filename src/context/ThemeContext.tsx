@@ -18,11 +18,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (savedTheme) {
       setTheme(savedTheme);
       document.documentElement.classList.toggle("dark", savedTheme === "dark");
-    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      // If no saved preference, use system preference
-      setTheme("dark");
-      document.documentElement.classList.toggle("dark", true);
     }
+    // If no saved preference, keep default light theme (no system preference check)
   }, []);
 
   const handleThemeChange = (newTheme: Theme) => {

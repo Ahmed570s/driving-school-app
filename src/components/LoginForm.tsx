@@ -12,7 +12,8 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Mail, Lock, User } from "lucide-react";
+import { Mail, Lock, User, Info } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 const LoginForm = () => {
   const [email, setEmail] = useState("");
@@ -71,6 +72,23 @@ const LoginForm = () => {
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Welcome to Driving School</h1>
         <p className="text-muted-foreground">Enter your details to sign in to your account</p>
       </div>
+      
+      <Card className="p-3 bg-blue-50 border-blue-200">
+        <div className="flex items-start gap-2">
+          <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium text-blue-900">Test Credentials</h3>
+            <div className="text-xs text-blue-800 space-y-0.5">
+              <p><strong>Email:</strong> admin@example.com <br></br>
+              <strong>Password:</strong> admin <br></br> 
+              <strong>Role:</strong> Admin</p>
+            </div>
+            <p className="text-xs text-blue-700">
+              Note: Only admin role is currently in development.
+            </p>
+          </div>
+        </div>
+      </Card>
       
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
