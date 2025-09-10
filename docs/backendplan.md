@@ -56,12 +56,12 @@ This document outlines the step-by-step plan to develop a complete backend syste
 - [✅] Set up Row Level Security (RLS) policies
 - [✅] Create database functions and triggers
 - [✅] Set up database indexes for performance
-- [ ] Seed initial data (instructors, groups, etc.)
+- [✅] Seed initial data (instructors, groups, etc.)
 
 ### 1.3 Authentication Integration
 - [ ] Configure Supabase Auth settings
 - [ ] Set up email/password authentication
-- [ ] Configure OAuth providers (Google, GitHub, etc.)
+- [🔄] Configure OAuth providers (Google, GitHub, etc.)
 - [ ] Implement user registration flow
 - [ ] Add email confirmation setup
 - [ ] Create role-based access with custom claims
