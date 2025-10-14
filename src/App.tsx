@@ -8,6 +8,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { useIsMobile } from "./hooks/use-mobile";
 import { DesktopOnlyScreen } from "./components/DesktopOnlyScreen";
 import Index from "./pages/Index";
+import SignUp from "./pages/SignUp";
 import Admin from "./pages/admin/Admin";
 import Instructor from "./pages/instructor/Instructor";
 import Student from "./pages/student/Student";
@@ -29,6 +30,7 @@ const AppContent = () => {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Index />} />
+        <Route path="/signup" element={<SignUp />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/instructor" element={<Instructor />} />
         <Route path="/student" element={<Student />} />

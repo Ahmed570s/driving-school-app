@@ -150,7 +150,18 @@ const LoginForm = () => {
       </form>
       
       <div className="mt-4 text-center text-sm">
-        <p className="text-muted-foreground">Need help? <a href="#" className="text-primary hover:underline">Contact admin</a></p>
+        <p className="text-muted-foreground">
+          Need help? <a href="#" className="text-primary hover:underline">Contact admin</a>
+        </p>
+        <p className="text-muted-foreground mt-2">
+          Don't have an account?{" "}
+          <button 
+            onClick={() => navigate("/signup")}
+            className="text-primary hover:underline"
+          >
+            Create account
+          </button>
+        </p>
       </div>
     </div>
   );
