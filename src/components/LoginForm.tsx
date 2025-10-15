@@ -4,21 +4,13 @@ import { useAuth } from "../context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
 import { toast } from "sonner";
-import { Mail, Lock, User, Info } from "lucide-react";
+import { Mail, Lock, Info } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 const LoginForm = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"student" | "instructor" | "admin" | "">("");
   const [isLoading, setIsLoading] = useState(false);
   
   const { login } = useAuth();
@@ -28,7 +20,7 @@ const LoginForm = () => {
     e.preventDefault();
     
     // Basic form validation
-    if (!email || !password || !role) {
+    if (!email || !password) {
       toast.error("Please fill in all fields");
       return;
     }
@@ -36,35 +28,31 @@ const LoginForm = () => {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Call login function from context
-      login(email, password, role as "student" | "instructor" | "admin");
+      // Call real login function from context and get the user's role
+      const userRole = await login(email, password);
       
       toast.success("Login successful!");
       
-      // Redirect based on role
-      if (role === "admin") navigate("/admin");
-      else if (role === "instructor") navigate("/instructor");
-      else navigate("/student");
+      // Redirect based on role returned from login
+      if (userRole === "admin") {
+        navigate("/admin");
+      } else if (userRole === "instructor") {
+        navigate("/instructor");
+      } else if (userRole === "student") {
+        navigate("/student");
+      } else {
+        // Fallback for users without a role
+        navigate("/");
+      }
       
-    } catch (error) {
-      toast.error("Login failed. Please try again.");
+    } catch (error: any) {
+      toast.error(error.message || "Login failed. Please try again.");
       console.error(error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // The key change is here - we need to fix the type mismatch by ensuring
-  // we're explicitly handling the string value from Select and converting it to our role type
-  const handleRoleChange = (value: string) => {
-    // Only set the role if it matches one of our expected values
-    if (value === "student" || value === "instructor" || value === "admin" || value === "") {
-      setRole(value);
-    }
-  };
 
   return (
     <div className="w-full max-w-md mx-auto space-y-6">
@@ -77,14 +65,15 @@ const LoginForm = () => {
         <div className="flex items-start gap-2">
           <Info className="h-4 w-4 text-blue-600 mt-0.5" />
           <div className="space-y-1">
-            <h3 className="text-sm font-medium text-blue-900">Test Credentials</h3>
-            <div className="text-xs text-blue-800 space-y-0.5">
-              <p><strong>Email:</strong> admin@example.com <br></br>
-              <strong>Password:</strong> admin <br></br> 
-              <strong>Role:</strong> Admin</p>
-            </div>
-            <p className="text-xs text-blue-700">
-              Note: Only admin role is currently in development.
+            <h3 className="text-sm font-medium text-blue-900">Testing Environment</h3>
+            <p className="text-sm text-blue-700">
+              Please use the following credentials to sign in:
+            </p>
+            <p className="text-sm text-blue-700">
+              Email: testuser12@hotmail.com
+            </p>
+            <p className="text-sm text-blue-700">
+              Password: Testuser
             </p>
           </div>
         </div>
@@ -124,23 +113,6 @@ const LoginForm = () => {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-          </div>
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="role">Role</Label>
-          <div className="relative">
-            <User className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-            <Select value={role} onValueChange={handleRoleChange}>
-              <SelectTrigger className="pl-10">
-                <SelectValue placeholder="Select your role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="student">Student</SelectItem>
-                <SelectItem value="instructor">Instructor</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
         
