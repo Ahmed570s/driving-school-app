@@ -92,14 +92,23 @@ const Admin = () => {
     }
   });
   
-  const handleLogout = () => {
-    logout();
-    navigate("/");
-    toast({
-      title: "Logged out successfully",
-      description: "You have been logged out of your admin account"
-    });
-  };
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/");
+        toast({
+          title: "Logged out successfully",
+          description: "You have been logged out of your admin account.",
+        });
+      } catch (error) {
+        console.error('Logout error:', error);
+        toast({
+          title: "Logout failed",
+          description: "There was an error logging out. Please try again.",
+          variant: "destructive",
+        });
+      }
+    };
   
   const handleAddStudent = () => {
     navigateToCreateStudent();

@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { useIsMobile } from "./hooks/use-mobile";
 import { DesktopOnlyScreen } from "./components/DesktopOnlyScreen";
@@ -17,8 +17,23 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const LoadingScreen = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="text-center space-y-4">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+      <p className="text-muted-foreground">Loading...</p>
+    </div>
+  </div>
+);
+
 const AppContent = () => {
   const isMobile = useIsMobile();
+  const { isLoading } = useAuth();
+
+  // Show loading screen while auth is initializing
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   // Show desktop-only screen for mobile users
   if (isMobile) {

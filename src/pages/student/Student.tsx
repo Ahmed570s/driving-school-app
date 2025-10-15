@@ -15,9 +15,13 @@ const Student = () => {
     }
   }, [role, navigate]);
   
-  const handleLogout = () => {
-    logout();
-    navigate("/");
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/");
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
   
   return (
