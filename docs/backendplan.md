@@ -60,12 +60,12 @@ This document outlines the step-by-step plan to develop a complete backend syste
 
 ### 1.3 Authentication Integration
 - [✅] Configure Supabase Auth settings
-- [ ] Set up email/password authentication
+- [✅] Set up email/password authentication
 - [🔄] Configure OAuth providers (Google, GitHub, etc.)
 - [✅] Implement user registration flow
 - [🔄] Add email confirmation setup
-- [ ] Create role-based access with custom claims
-- [ ] Set up password reset functionality
+- [🔄]Create role-based access with custom claims
+- [🔄] Set up password reset functionality
 
 ### 1.4 Frontend Integration
 - [ ] Install Supabase React helpers

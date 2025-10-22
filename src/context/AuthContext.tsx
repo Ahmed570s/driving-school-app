@@ -6,6 +6,12 @@ import type { User } from '@supabase/supabase-js';
 // Debug flag - set to true to bypass Supabase temporarily
 const DEBUG_SKIP_SUPABASE = false;
 
+// Helper function to reset auth state (for debugging)
+const resetAuthState = () => {
+  localStorage.removeItem('supabase.auth.token');
+  window.location.reload();
+};
+
 type UserRole = 'student' | 'instructor' | 'admin' | null;
 
 interface AuthContextType {
@@ -115,17 +121,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('🔄 Auth state change:', event, session?.user?.email);
+        
         if (event === 'SIGNED_IN' && session?.user) {
+          console.log('✅ Setting user state for:', session.user.email);
           setUser(session.user);
           setIsAuthenticated(true);
           const userRole = await fetchUserRole(session.user.id);
           setRole(userRole);
+          console.log('✅ Auth state fully updated, role:', userRole);
+          setIsLoading(false); // Set loading to false after everything is set
         } else if (event === 'SIGNED_OUT') {
+          console.log('🔄 Clearing auth state');
           setUser(null);
           setRole(null);
           setIsAuthenticated(false);
+          setIsLoading(false); // Set loading to false after clearing state
         }
-        setIsLoading(false);
       }
     );
 
@@ -137,6 +149,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Real login function using Supabase
   const login = async (email: string, password: string): Promise<UserRole> => {
     try {
+      setIsLoading(true);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -146,17 +160,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error(error.message);
       }
 
+      // Don't set state here - let the auth state listener handle it
+      // This prevents conflicts and duplicate state updates
       if (data.user) {
-        setUser(data.user);
-        setIsAuthenticated(true);
         const userRole = await fetchUserRole(data.user.id);
-        setRole(userRole);
         return userRole;
       }
       
       return null;
     } catch (error) {
       console.error('Login error:', error);
+      setIsLoading(false);
       throw error;
     }
   };
@@ -164,17 +178,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Real logout function using Supabase
   const logout = async (): Promise<void> => {
     try {
+      console.log('🔄 AuthContext: Starting logout...');
+      
       const { error } = await supabase.auth.signOut();
       
       if (error) {
+        console.error('❌ AuthContext: Supabase logout error:', error);
         throw new Error(error.message);
       }
 
+      console.log('✅ AuthContext: Supabase logout successful');
+      
+      // Don't set state here - let the auth state listener handle it
+      // This ensures consistent state management
+    } catch (error) {
+      console.error('❌ AuthContext: Logout error:', error);
+      // On error, force clear the state
       setUser(null);
       setRole(null);
       setIsAuthenticated(false);
-    } catch (error) {
-      console.error('Logout error:', error);
       throw error;
     }
   };

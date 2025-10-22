@@ -94,20 +94,28 @@ const Admin = () => {
   
   const handleLogout = async () => {
     try {
+      console.log('🔄 Attempting logout...');
       await logout();
-      navigate("/");
-        toast({
-          title: "Logged out successfully",
-          description: "You have been logged out of your admin account.",
-        });
-      } catch (error) {
-        console.error('Logout error:', error);
-        toast({
-          title: "Logout failed",
-          description: "There was an error logging out. Please try again.",
-          variant: "destructive",
-        });
-      }
+      console.log('✅ Logout successful, redirecting...');
+      
+      toast({
+        title: "Logged out successfully",
+        description: "You have been logged out of your admin account.",
+      });
+      
+      // Small delay to show toast before redirect
+      setTimeout(() => {
+        navigate("/");
+      }, 500);
+      
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+      toast({
+        title: "Logout Error",
+        description: "There was an issue logging out. Please try again.",
+        variant: "destructive"
+      });
+    }
     };
   
   const handleAddStudent = () => {

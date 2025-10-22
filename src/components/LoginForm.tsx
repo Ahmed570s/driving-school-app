@@ -33,6 +33,9 @@ const LoginForm = () => {
       
       toast.success("Login successful!");
       
+      // Small delay to ensure auth state is fully updated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       // Redirect based on role returned from login
       if (userRole === "admin") {
         navigate("/admin");
@@ -66,15 +69,10 @@ const LoginForm = () => {
           <Info className="h-4 w-4 text-blue-600 mt-0.5" />
           <div className="space-y-1">
             <h3 className="text-sm font-medium text-blue-900">Testing Environment</h3>
-            <p className="text-sm text-blue-700">
-              Please use the following credentials to sign in:
-            </p>
-            <p className="text-sm text-blue-700">
-              Email: testuser12@hotmail.com
-            </p>
-            <p className="text-sm text-blue-700">
-              Password: Testuser
-            </p>
+            <div className="text-xs text-blue-800 space-y-0.5">
+              <p><strong>Email:</strong> Testuser12@hotmail.com <br></br>
+              <strong>Password:</strong> Testuser</p>
+            </div>
           </div>
         </div>
       </Card>

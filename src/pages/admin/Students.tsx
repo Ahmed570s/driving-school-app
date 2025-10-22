@@ -22,6 +22,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/components/ui/use-toast";
 import { BasicStudent, studentsListData, addNewStudent } from "@/data/students";
+import { getStudents } from "@/services/students";
 
 // Type definitions
 type StudentStatus = "active" | "on-hold" | "completed" | "dropped";
@@ -50,9 +51,43 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
     hasMissingClasses: null
   });
   const [selectedStudent, setSelectedStudent] = useState<BasicStudent | null>(null);
+  const [students, setStudents] = useState<BasicStudent[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // 🔄 REAL DATABASE FUNCTION - Load students from database
+  const loadStudents = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Loading students from database...');
+      const realStudents = await getStudents();
+      console.log('✅ Loaded students:', realStudents);
+      setStudents(realStudents);
+      
+      toast({
+        title: "Students Loaded Successfully! 🎉",
+        description: `Found ${realStudents.length} students`,
+      });
+    } catch (error) {
+      console.error('❌ Failed to load students:', error);
+      toast({
+        title: "Failed to Load Students",
+        description: "Check console for details",
+        variant: "destructive"
+      });
+      // Fallback to empty array on error
+      setStudents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load students when component mounts
+  useEffect(() => {
+    loadStudents();
+  }, []);
   
   // Apply filters and search
-  const filteredStudents = studentsListData.filter(student => {
+  const filteredStudents = students.filter(student => {
     // Search by name, email, or phone
     const matchesSearch = debouncedSearchTerm === "" || 
       student.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
@@ -164,10 +199,15 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
     <PageLayout>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Students</h1>
-        <Button onClick={handleAddStudent}>
-          <Plus className="mr-1 h-4 w-4" />
-          Add New Student
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={loadStudents} disabled={loading}>
+            🔄 Refresh
+          </Button>
+          <Button onClick={handleAddStudent}>
+            <Plus className="mr-1 h-4 w-4" />
+            Add New Student
+          </Button>
+        </div>
       </div>
       
       <Card className="p-3 bg-blue-50 border-blue-200 mb-6">
@@ -390,7 +430,16 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedStudents.length === 0 ? (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                    Loading students...
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : sortedStudents.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   No students found. Try adjusting your search or filters.
