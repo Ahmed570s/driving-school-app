@@ -16,8 +16,13 @@ interface DatabaseStudent {
   status: 'active' | 'on_hold' | 'completed' | 'dropped';
   has_balance: boolean;
   has_missing_classes: boolean;
-  // From profiles table (joined) - Supabase returns this as a single object
+  // From profiles table (joined) - Supabase can return array or single object
   profiles: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+  }[] | {
     first_name: string;
     last_name: string;
     email: string;
@@ -34,8 +39,10 @@ interface DatabaseStudent {
  * This is like a translator - takes database format and makes it UI-friendly
  */
 const convertToBasicStudent = (dbStudent: DatabaseStudent): BasicStudent => {
-  // Get the profile (should be a single object now)
-  const profile = dbStudent.profiles;
+  // Handle both array and single object from Supabase
+  const profile = Array.isArray(dbStudent.profiles) 
+    ? dbStudent.profiles[0] 
+    : dbStudent.profiles;
   
   // Safety check - if no profile found, use fallback values
   if (!profile) {
@@ -83,7 +90,7 @@ export const getStudents = async (): Promise<BasicStudent[]> => {
   try {
     console.log('🔍 Fetching students from database...');
     
-    // Query Supabase: Get students and join with profiles
+    // Query Supabase: Get students and join with profiles using explicit foreign key
     const { data, error } = await supabase
       .from('students')
       .select(`
@@ -94,7 +101,7 @@ export const getStudents = async (): Promise<BasicStudent[]> => {
         status,
         has_balance,
         has_missing_classes,
-        profiles (
+        profiles!students_profile_id_fkey (
           first_name,
           last_name,
           email,
