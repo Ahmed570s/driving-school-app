@@ -16,7 +16,7 @@ import {
   Plus
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
-import { BasicStudent, addNewStudent, studentsListData } from "@/data/students";
+import { createStudent } from "@/services/students";
 
 interface CreateStudentProps {
   onBack: () => void;
@@ -117,6 +117,18 @@ const CreateStudent: React.FC<CreateStudentProps> = ({ onBack, onStudentCreated 
       return false;
     }
 
+    // Phone number validation (basic)
+    const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+    const cleanPhone = formData.phone.replace(/[\s\-\(\)]/g, '');
+    if (!phoneRegex.test(cleanPhone)) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid phone number.",
+        variant: "destructive"
+      });
+      return false;
+    }
+
     return true;
   };
 
@@ -128,39 +140,34 @@ const CreateStudent: React.FC<CreateStudentProps> = ({ onBack, onStudentCreated 
     setIsSubmitting(true);
 
     try {
-      // Generate new student ID
-      const newId = studentsListData.length > 0 
-        ? (Math.max(...studentsListData.map(s => parseInt(s.id))) + 1).toString()
-        : "1";
-
-      // Create basic student for the list
-      const basicStudent: BasicStudent = {
-        id: newId,
-        name: `${formData.firstName} ${formData.lastName}`,
+      // Create student in database using real service
+      const newStudent = await createStudent({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
         email: formData.email,
         phone: formData.phone,
-        group: formData.group,
-        hoursDone: 0,
-        status: formData.status,
-        hasBalance: false,
-        hasMissingClasses: false
-      };
-
-      // Add to shared data with form data for complete profile
-      addNewStudent(basicStudent, formData);
+        whatsapp: formData.whatsapp,
+        street: formData.street,
+        apartment: formData.apartment,
+        city: formData.city,
+        postalCode: formData.postalCode,
+        dateOfBirth: formData.dateOfBirth,
+        status: formData.status === 'on-hold' ? 'on_hold' : formData.status
+      });
 
       toast({
-        title: "Student Created Successfully",
-        description: `${formData.firstName} ${formData.lastName} has been added to the system.`
+        title: "Student Created Successfully! 🎉",
+        description: `${formData.firstName} ${formData.lastName} (${newStudent.studentId}) has been added to the system.`
       });
 
       // Navigate to the student profile
-      onStudentCreated(newId);
+      onStudentCreated(newStudent.id);
 
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Create student error:', error);
       toast({
         title: "Error Creating Student",
-        description: "There was an error creating the student. Please try again.",
+        description: error.message || "There was an error creating the student. Please try again.",
         variant: "destructive"
       });
     } finally {

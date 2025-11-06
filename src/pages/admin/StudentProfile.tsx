@@ -50,7 +50,8 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "@/components/ui/use-toast";
-import { Student, Document, studentProfilesData, createCompleteStudent } from "@/data/students";
+import { Student, Document } from "@/data/students";
+import { getStudentById, updateStudent } from "@/services/students";
 
 // Types
 interface Session {
@@ -128,31 +129,49 @@ const StudentProfile = ({
   const [completionFilter, setCompletionFilter] = useState<"all" | "completed" | "pending">("all");
   const [isEditingStudent, setIsEditingStudent] = useState(initialEditMode);
   const [editedStudent, setEditedStudent] = useState<Student | null>(null);
-
-  // Get student data and ensure it's complete
-  const rawStudent = studentId ? studentProfilesData[studentId] : null;
-  const student = rawStudent ? createCompleteStudent(rawStudent) : null;
+  const [student, setStudent] = useState<Student | null>(null);
+  const [loading, setLoading] = useState(true);
   
-  // Initialize editedStudent when entering edit mode or when initialEditMode is true
+  // Load student data from database
+  React.useEffect(() => {
+    const loadStudent = async () => {
+      if (!studentId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const studentData = await getStudentById(studentId);
+        setStudent(studentData);
+        
+        // Initialize edit mode if needed
+        if (initialEditMode && studentData && !editedStudent) {
+          setEditedStudent({ ...studentData });
+        }
+      } catch (error) {
+        console.error('Error loading student:', error);
+        toast({
+          title: "Error Loading Student",
+          description: "Failed to load student data. Please try again.",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStudent();
+  }, [studentId, initialEditMode]);
+
+  // Initialize editedStudent when entering edit mode
   React.useEffect(() => {
     if (initialEditMode && student && !editedStudent) {
       setEditedStudent({ ...student });
     }
   }, [initialEditMode, student, editedStudent]);
 
-  if (!student) {
-    return (
-      <div className="text-center py-8">
-        <h1 className="text-2xl font-bold text-red-600">Student Not Found</h1>
-        <Button onClick={onBack} className="mt-4">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Students
-        </Button>
-      </div>
-    );
-  }
-
-  // Calculate progress
+  // Calculate progress (must be before early returns to maintain hook order)
   const completedSessions = sessions.filter(s => s.completed).length;
   const progressPercentage = Math.round((completedSessions / sessions.length) * 100);
   
@@ -168,7 +187,7 @@ const StudentProfile = ({
     return 4;
   };
 
-  // Filter sessions
+  // Filter sessions (must be before early returns to maintain hook order)
   const filteredSessions = useMemo(() => {
     return sessions.filter(session => {
       const matchesPhase = phaseFilter === "all" || session.phase.toString() === phaseFilter;
@@ -180,6 +199,28 @@ const StudentProfile = ({
       return matchesPhase && matchesType && matchesCompletion;
     });
   }, [sessions, phaseFilter, typeFilter, completionFilter]);
+
+  // Early returns AFTER all hooks
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+        <h1 className="text-2xl font-bold">Loading Student...</h1>
+      </div>
+    );
+  }
+
+  if (!student) {
+    return (
+      <div className="text-center py-8">
+        <h1 className="text-2xl font-bold text-red-600">Student Not Found</h1>
+        <Button onClick={onBack} className="mt-4">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Students
+        </Button>
+      </div>
+    );
+  }
 
   // Session modal handlers
   const openSessionModal = (session: Session) => {
@@ -199,20 +240,34 @@ const StudentProfile = ({
     setIsEditingStudent(true);
   };
 
-  const handleSaveStudent = () => {
-    if (editedStudent) {
-      // Here you would typically make an API call to save the student data
-      // For now, we'll just show a toast notification
-      console.log('Saving student data:', editedStudent);
+  const handleSaveStudent = async () => {
+    if (!editedStudent || !studentId) return;
+
+    try {
+      setLoading(true);
       
-      toast({
-        title: "Student information updated",
-        description: "The student's information has been saved successfully.",
-      });
+      // Update student in database
+      const updatedStudent = await updateStudent(studentId, editedStudent);
       
+      // Update local state
+      setStudent(updatedStudent);
       setIsEditingStudent(false);
       setEditedStudent(null);
-      // You could update the local state or refetch data here
+      
+      toast({
+        title: "Student Updated Successfully! 🎉",
+        description: "The student's information has been saved to the database.",
+      });
+      
+    } catch (error: any) {
+      console.error('Update student error:', error);
+      toast({
+        title: "Error Updating Student",
+        description: error.message || "Failed to update student. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
   };
 

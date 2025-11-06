@@ -78,6 +78,76 @@ const convertToBasicStudent = (dbStudent: DatabaseStudent): BasicStudent => {
   };
 };
 
+/**
+ * Converts database student with full profile to Complete Student format for the UI
+ * This is for the detailed student profile page
+ */
+const convertToCompleteStudent = (dbStudent: any): Student => {
+  // Handle both array and single object from Supabase
+  const profile = Array.isArray(dbStudent.profiles) 
+    ? dbStudent.profiles[0] 
+    : dbStudent.profiles;
+  
+  // Safety check - if no profile found, use fallback values
+  if (!profile) {
+    console.warn('⚠️ No profile found for student:', dbStudent.id);
+    return {
+      id: dbStudent.id,
+      firstName: 'Unknown',
+      lastName: 'Student',
+      studentId: dbStudent.student_id || `DS${new Date().getFullYear()}001`,
+      phone: 'No phone',
+      email: 'no-email@example.com',
+      whatsapp: 'No WhatsApp',
+      street: '',
+      apartment: '',
+      city: '',
+      postalCode: '',
+      dateOfBirth: '',
+      learnerLicenseNumber: '',
+      group: "none",
+      status: dbStudent.status === 'on_hold' ? 'on-hold' : dbStudent.status as any,
+      currentPhase: dbStudent.current_phase || 1,
+      totalCompletedSessions: dbStudent.total_hours_completed || 0,
+      enrollmentDate: dbStudent.enrollment_date || new Date().toISOString().split('T')[0],
+      contractExpiryDate: dbStudent.contract_expiry_date || new Date().toISOString().split('T')[0],
+      needsSupport: dbStudent.needs_support || false,
+      attendanceIssues: dbStudent.attendance_issues || false,
+      documents: [] // TODO: Add documents later
+    };
+  }
+  
+  // Convert database status format to UI format
+  const convertStatus = (dbStatus: string) => {
+    return dbStatus === 'on_hold' ? 'on-hold' : dbStatus as any;
+  };
+  
+  return {
+    id: dbStudent.id,
+    firstName: profile.first_name,
+    lastName: profile.last_name,
+    studentId: dbStudent.student_id,
+    phone: profile.phone,
+    email: profile.email,
+    whatsapp: profile.whatsapp || profile.phone,
+    street: profile.street_address || '',
+    apartment: profile.apartment || '',
+    city: profile.city || '',
+    postalCode: profile.postal_code || '',
+    dateOfBirth: dbStudent.date_of_birth || '',
+    learnerLicenseNumber: dbStudent.learner_license_number || '',
+    group: "A", // TODO: Get real group from database later
+    status: convertStatus(dbStudent.status),
+    currentPhase: dbStudent.current_phase || 1,
+    totalCompletedSessions: dbStudent.total_hours_completed || 0,
+    enrollmentDate: dbStudent.enrollment_date,
+    contractExpiryDate: dbStudent.contract_expiry_date,
+    needsSupport: dbStudent.needs_support || false,
+    attendanceIssues: dbStudent.attendance_issues || false,
+    documents: [] // TODO: Add documents later
+  };
+};
+
 // ============================================================================
 // MAIN SERVICE FUNCTIONS - These are what your components will use
 // ============================================================================
@@ -142,10 +212,51 @@ export const getStudentById = async (studentId: string): Promise<Student | null>
   try {
     console.log(`🔍 Fetching student ${studentId} from database...`);
     
-    // For now, return null - we'll implement this in the next step
-    // This is called "stubbing" - creating the function structure first
-    console.log('⚠️ getStudentById not implemented yet');
-    return null;
+    // Query Supabase: Get student with profile data
+    const { data, error } = await supabase
+      .from('students')
+      .select(`
+        id,
+        student_id,
+        date_of_birth,
+        learner_license_number,
+        status,
+        current_phase,
+        total_hours_completed,
+        enrollment_date,
+        contract_expiry_date,
+        needs_support,
+        attendance_issues,
+        profiles!students_profile_id_fkey (
+          first_name,
+          last_name,
+          email,
+          phone,
+          whatsapp,
+          street_address,
+          apartment,
+          city,
+          postal_code
+        )
+      `)
+      .eq('id', studentId)
+      .single();
+
+    if (error) {
+      console.error('❌ Database error:', error);
+      throw error;
+    }
+
+    if (!data) {
+      console.log('⚠️ Student not found');
+      return null;
+    }
+
+    console.log('✅ Student found:', data);
+    
+    // Convert database format to UI format
+    const student = convertToCompleteStudent(data);
+    return student;
 
   } catch (error) {
     console.error('💥 Error in getStudentById:', error);
@@ -154,9 +265,216 @@ export const getStudentById = async (studentId: string): Promise<Student | null>
 };
 
 // ============================================================================
+// CREATE & UPDATE FUNCTIONS - Phase 1.2 Implementation
+// ============================================================================
+
+/**
+ * Create a new student in the database
+ * This will replace the mock addNewStudent function
+ */
+export const createStudent = async (studentData: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  whatsapp?: string;
+  street?: string;
+  apartment?: string;
+  city?: string;
+  postalCode?: string;
+  dateOfBirth?: string;
+  status?: 'active' | 'on_hold' | 'completed' | 'dropped';
+}): Promise<Student> => {
+  try {
+    console.log('🔍 Creating new student...', studentData);
+
+    // Step 1: Create the profile (database will auto-generate id)
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        email: studentData.email,
+        role: 'student',
+        first_name: studentData.firstName,
+        last_name: studentData.lastName,
+        phone: studentData.phone,
+        whatsapp: studentData.whatsapp || studentData.phone,
+        street_address: studentData.street || '',
+        apartment: studentData.apartment || '',
+        city: studentData.city || '',
+        postal_code: studentData.postalCode || ''
+      })
+      .select()
+      .single();
+
+    if (profileError) {
+      console.error('❌ Profile creation error:', profileError);
+      
+      // Check for duplicate email error
+      if (profileError.code === '23505' && profileError.message.includes('profiles_email_key')) {
+        throw new Error(`A user with email "${studentData.email}" already exists. Please use a different email address.`);
+      }
+      
+      throw profileError;
+    }
+
+    console.log('✅ Profile created:', profileData);
+
+    // Step 2: Generate student ID
+    const currentYear = new Date().getFullYear();
+    const { data: existingStudents } = await supabase
+      .from('students')
+      .select('student_id')
+      .like('student_id', `DS${currentYear}%`)
+      .order('student_id', { ascending: false })
+      .limit(1);
+
+    let nextNumber = 1;
+    if (existingStudents && existingStudents.length > 0) {
+      const lastId = existingStudents[0].student_id;
+      const lastNumber = parseInt(lastId.slice(-3));
+      nextNumber = lastNumber + 1;
+    }
+    
+    const studentId = `DS${currentYear}${String(nextNumber).padStart(3, '0')}`;
+
+    // Step 3: Calculate enrollment date
+    const enrollmentDate = new Date();
+
+    // Step 4: Create the student record
+    const { data: studentRecord, error: studentError } = await supabase
+      .from('students')
+      .insert({
+        profile_id: profileData.id,
+        student_id: studentId,
+        date_of_birth: studentData.dateOfBirth || null,
+        status: studentData.status || 'active',
+        current_phase: 1,
+        total_hours_completed: 0,
+        enrollment_date: enrollmentDate.toISOString().split('T')[0],
+        // contract_expiry_date is auto-generated by database (enrollment_date + 18 months)
+        needs_support: false,
+        attendance_issues: false
+      })
+      .select()
+      .single();
+
+    if (studentError) {
+      console.error('❌ Student creation error:', studentError);
+      throw studentError;
+    }
+
+    console.log('✅ Student created:', studentRecord);
+
+    // Step 5: Return the complete student object
+    const completeStudent: Student = {
+      id: studentRecord.id,
+      firstName: studentData.firstName,
+      lastName: studentData.lastName,
+      studentId: studentId,
+      phone: studentData.phone,
+      email: studentData.email,
+      whatsapp: studentData.whatsapp || studentData.phone,
+      street: studentData.street || '',
+      apartment: studentData.apartment || '',
+      city: studentData.city || '',
+      postalCode: studentData.postalCode || '',
+      dateOfBirth: studentData.dateOfBirth || '',
+      learnerLicenseNumber: '',
+      group: "none", // TODO: Add group assignment later
+      status: (studentData.status || 'active') as any,
+      currentPhase: 1,
+      totalCompletedSessions: 0,
+      enrollmentDate: enrollmentDate.toISOString().split('T')[0],
+      contractExpiryDate: studentRecord.contract_expiry_date || enrollmentDate.toISOString().split('T')[0],
+      needsSupport: false,
+      attendanceIssues: false,
+      documents: []
+    };
+
+    return completeStudent;
+
+  } catch (error) {
+    console.error('💥 Error in createStudent:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update an existing student in the database
+ * This will replace the mock student update functionality
+ */
+export const updateStudent = async (studentId: string, updates: Partial<Student>): Promise<Student> => {
+  try {
+    console.log('🔍 Updating student...', studentId, updates);
+
+    // Step 1: Update the profile data
+    if (updates.firstName || updates.lastName || updates.email || updates.phone || 
+        updates.whatsapp || updates.street || updates.apartment || updates.city || updates.postalCode) {
+      
+      const profileUpdates: any = {};
+      if (updates.firstName) profileUpdates.first_name = updates.firstName;
+      if (updates.lastName) profileUpdates.last_name = updates.lastName;
+      if (updates.email) profileUpdates.email = updates.email;
+      if (updates.phone) profileUpdates.phone = updates.phone;
+      if (updates.whatsapp) profileUpdates.whatsapp = updates.whatsapp;
+      if (updates.street) profileUpdates.street_address = updates.street;
+      if (updates.apartment) profileUpdates.apartment = updates.apartment;
+      if (updates.city) profileUpdates.city = updates.city;
+      if (updates.postalCode) profileUpdates.postal_code = updates.postalCode;
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update(profileUpdates)
+        .eq('id', (await supabase.from('students').select('profile_id').eq('id', studentId).single()).data?.profile_id);
+
+      if (profileError) {
+        console.error('❌ Profile update error:', profileError);
+        throw profileError;
+      }
+    }
+
+    // Step 2: Update the student data
+    const studentUpdates: any = {};
+    if (updates.dateOfBirth) studentUpdates.date_of_birth = updates.dateOfBirth;
+    if (updates.learnerLicenseNumber) studentUpdates.learner_license_number = updates.learnerLicenseNumber;
+    if (updates.status) studentUpdates.status = updates.status === 'on-hold' ? 'on_hold' : updates.status;
+    if (updates.currentPhase) studentUpdates.current_phase = updates.currentPhase;
+    if (updates.totalCompletedSessions !== undefined) studentUpdates.total_hours_completed = updates.totalCompletedSessions;
+    if (updates.enrollmentDate) studentUpdates.enrollment_date = updates.enrollmentDate;
+    if (updates.contractExpiryDate) studentUpdates.contract_expiry_date = updates.contractExpiryDate;
+    if (updates.needsSupport !== undefined) studentUpdates.needs_support = updates.needsSupport;
+    if (updates.attendanceIssues !== undefined) studentUpdates.attendance_issues = updates.attendanceIssues;
+
+    if (Object.keys(studentUpdates).length > 0) {
+      const { error: studentError } = await supabase
+        .from('students')
+        .update(studentUpdates)
+        .eq('id', studentId);
+
+      if (studentError) {
+        console.error('❌ Student update error:', studentError);
+        throw studentError;
+      }
+    }
+
+    console.log('✅ Student updated successfully');
+
+    // Step 3: Fetch and return the updated student
+    const updatedStudent = await getStudentById(studentId);
+    if (!updatedStudent) {
+      throw new Error('Failed to fetch updated student');
+    }
+
+    return updatedStudent;
+
+  } catch (error) {
+    console.error('💥 Error in updateStudent:', error);
+    throw error;
+  }
+};
+
+// ============================================================================
 // COMING NEXT - Functions we'll add later
 // ============================================================================
 
-// export const createStudent = async (studentData: any): Promise<Student> => { ... }
-// export const updateStudent = async (id: string, updates: any): Promise<Student> => { ... }
 // export const deleteStudent = async (id: string): Promise<void> => { ... }
