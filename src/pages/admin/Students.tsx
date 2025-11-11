@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronDown, Filter, Plus, Search, X, Info } from "lucide-react";
+import { Check, ChevronDown, Filter, Plus, Search, X, Info, Trash2 } from "lucide-react";
 import { useDebounce } from "@/hooks/use-debounce";
 
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/components/ui/use-toast";
 import { BasicStudent, studentsListData, addNewStudent } from "@/data/students";
-import { getStudents } from "@/services/students";
+import { getStudents, deleteMultipleStudents } from "@/services/students";
 
 // Type definitions
 type StudentStatus = "active" | "on-hold" | "completed" | "dropped";
@@ -88,11 +88,12 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
   
   // Apply filters and search
   const filteredStudents = students.filter(student => {
-    // Search by name, email, or phone
+    // Search by name, email, phone, or student ID
     const matchesSearch = debouncedSearchTerm === "" || 
       student.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
       student.email.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-      student.phone.includes(debouncedSearchTerm);
+      student.phone.includes(debouncedSearchTerm) ||
+      student.studentId.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
     
     // Apply filters
     const matchesGroup = filters.group === "all" || student.group === filters.group;
@@ -162,7 +163,51 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
     setSelectedStudent(null);
   };
   
-  // Bulk actions handlers
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    if (selectedStudents.length === 0) {
+      toast({
+        title: "No students selected",
+        description: "Please select at least one student to delete."
+      });
+      return;
+    }
+
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete ${selectedStudents.length} student${selectedStudents.length > 1 ? 's' : ''}? This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      
+      // Delete selected students from database
+      await deleteMultipleStudents(selectedStudents);
+      
+      toast({
+        title: "Students Deleted Successfully! 🗑️",
+        description: `${selectedStudents.length} student${selectedStudents.length > 1 ? 's have' : ' has'} been permanently removed from the system.`,
+      });
+      
+      // Clear selection and reload students list
+      setSelectedStudents([]);
+      await loadStudents();
+      
+    } catch (error: any) {
+      console.error('Bulk delete error:', error);
+      toast({
+        title: "Error Deleting Students",
+        description: error.message || "Failed to delete students. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Bulk actions handlers (for non-delete actions - keeping as mock for now)
   const handleBulkAction = (action: string, value: string) => {
     if (selectedStudents.length === 0) {
       toast({
@@ -172,10 +217,10 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
       return;
     }
     
-    // Simulate action (in real app, this would update data)
+    // TODO: Implement real bulk update operations
     toast({
       title: `Bulk action: ${action}`,
-      description: `Applied ${action}: ${value} to ${selectedStudents.length} students`
+      description: `Applied ${action}: ${value} to ${selectedStudents.length} students (Mock - not yet implemented)`
     });
     
     // Clear selection after action
@@ -230,7 +275,7 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input 
-            placeholder="Search by name, email, or phone..."
+            placeholder="Search by name, email, phone, or student ID..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -405,7 +450,19 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
               </SelectContent>
             </Select>
             
-            <Button variant="destructive" onClick={() => handleBulkAction("delete", "")}>Delete</Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={loading}>
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </>
+              )}
+            </Button>
           </div>
         </div>
       )}
@@ -422,6 +479,7 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
                 />
               </TableHead>
               <TableHead>Full Name</TableHead>
+              <TableHead>Student ID</TableHead>
               <TableHead className="hidden md:table-cell">Email</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead>Group</TableHead>
@@ -432,7 +490,7 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   <div className="flex items-center justify-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                     Loading students...
@@ -441,7 +499,7 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
               </TableRow>
             ) : sortedStudents.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   No students found. Try adjusting your search or filters.
                 </TableCell>
               </TableRow>
@@ -459,6 +517,7 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
                     />
                   </TableCell>
                   <TableCell className="font-medium">{student.name}</TableCell>
+                  <TableCell className="font-mono text-sm">{student.studentId}</TableCell>
                   <TableCell className="hidden md:table-cell">{student.email}</TableCell>
                   <TableCell>{student.phone}</TableCell>
                   <TableCell>Group {student.group}</TableCell>

@@ -51,7 +51,7 @@ import {
 import { format } from "date-fns";
 import { toast } from "@/components/ui/use-toast";
 import { Student, Document } from "@/data/students";
-import { getStudentById, updateStudent } from "@/services/students";
+import { getStudentById, updateStudent, deleteStudent } from "@/services/students";
 
 // Types
 interface Session {
@@ -131,6 +131,8 @@ const StudentProfile = ({
   const [editedStudent, setEditedStudent] = useState<Student | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Load student data from database
   React.useEffect(() => {
@@ -276,6 +278,39 @@ const StudentProfile = ({
     setEditedStudent(null);
   };
 
+  // Handle student deletion
+  const handleDeleteStudent = async () => {
+    if (!student || !studentId) return;
+
+    try {
+      setIsDeleting(true);
+      
+      // Delete student from database
+      await deleteStudent(studentId);
+      
+      toast({
+        title: "Student Deleted Successfully! 🗑️",
+        description: `${student.firstName} ${student.lastName} has been permanently removed from the system.`,
+      });
+      
+      // Close the confirmation dialog
+      setDeleteConfirmOpen(false);
+      
+      // Navigate back to students list
+      onBack();
+      
+    } catch (error: any) {
+      console.error('Delete student error:', error);
+      toast({
+        title: "Error Deleting Student",
+        description: error.message || "Failed to delete student. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleStudentFieldChange = (field: keyof Student, value: string) => {
     if (editedStudent) {
       const updated = { ...editedStudent, [field]: value };
@@ -341,10 +376,20 @@ const StudentProfile = ({
       {/* Header with back button */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Student Profile</h1>
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Students
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="destructive" 
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={isDeleting}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete Student
+          </Button>
+          <Button variant="outline" onClick={onBack}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Students
+          </Button>
+        </div>
       </div>
 
       {/* Tabs Container */}
@@ -972,6 +1017,83 @@ const StudentProfile = ({
               />
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Student
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to permanently delete this student? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {student && (
+            <div className="py-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0">
+                    <User className="h-8 w-8 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-red-900">
+                      {student.firstName} {student.lastName}
+                    </h3>
+                    <p className="text-sm text-red-700">
+                      Student ID: {student.studentId}
+                    </p>
+                    <p className="text-sm text-red-700">
+                      Email: {student.email}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-4 text-sm text-muted-foreground">
+                <p className="font-medium mb-2">This will permanently remove:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Student profile and personal information</li>
+                  <li>All session records and progress</li>
+                  <li>Documents and certificates</li>
+                  <li>Payment and enrollment history</li>
+                </ul>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter className="gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="button" 
+              variant="destructive" 
+              onClick={handleDeleteStudent}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Student
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

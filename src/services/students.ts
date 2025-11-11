@@ -50,6 +50,7 @@ const convertToBasicStudent = (dbStudent: DatabaseStudent): BasicStudent => {
     return {
       id: dbStudent.id,
       name: `Student ${dbStudent.student_id}`,
+      studentId: dbStudent.student_id,
       email: 'no-email@example.com',
       phone: 'No phone',
       group: "A",
@@ -68,6 +69,7 @@ const convertToBasicStudent = (dbStudent: DatabaseStudent): BasicStudent => {
   return {
     id: dbStudent.id,
     name: `${profile.first_name} ${profile.last_name}`,
+    studentId: dbStudent.student_id,
     email: profile.email,
     phone: profile.phone,
     group: "A", // TODO: Get real group from database later
@@ -479,8 +481,124 @@ export const updateStudent = async (studentId: string, updates: Partial<Student>
   }
 };
 
+/**
+ * Delete a student from the database
+ * This removes both the student record and the associated profile
+ */
+export const deleteStudent = async (studentId: string): Promise<void> => {
+  try {
+    console.log('🔍 Deleting student...', studentId);
+
+    // Step 1: Get the student's profile_id before deletion
+    const { data: studentData, error: fetchError } = await supabase
+      .from('students')
+      .select('profile_id')
+      .eq('id', studentId)
+      .single();
+
+    if (fetchError) {
+      console.error('❌ Error fetching student for deletion:', fetchError);
+      throw new Error('Student not found or could not be accessed');
+    }
+
+    if (!studentData) {
+      throw new Error('Student not found');
+    }
+
+    // Step 2: Delete the student record first (due to foreign key constraints)
+    const { error: studentDeleteError } = await supabase
+      .from('students')
+      .delete()
+      .eq('id', studentId);
+
+    if (studentDeleteError) {
+      console.error('❌ Error deleting student record:', studentDeleteError);
+      throw new Error('Failed to delete student record');
+    }
+
+    // Step 3: Delete the associated profile
+    const { error: profileDeleteError } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', studentData.profile_id);
+
+    if (profileDeleteError) {
+      console.error('❌ Error deleting profile:', profileDeleteError);
+      // Note: Student record is already deleted, but profile deletion failed
+      // In a production app, you might want to implement a cleanup job
+      throw new Error('Student deleted but profile cleanup failed');
+    }
+
+    console.log('✅ Student and profile deleted successfully');
+
+  } catch (error) {
+    console.error('💥 Error in deleteStudent:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete multiple students from the database
+ * This is for bulk delete operations
+ */
+export const deleteMultipleStudents = async (studentIds: string[]): Promise<void> => {
+  try {
+    console.log('🔍 Bulk deleting students...', studentIds);
+
+    if (studentIds.length === 0) {
+      throw new Error('No students selected for deletion');
+    }
+
+    // Step 1: Get all profile_ids for the students to be deleted
+    const { data: studentsData, error: fetchError } = await supabase
+      .from('students')
+      .select('id, profile_id')
+      .in('id', studentIds);
+
+    if (fetchError) {
+      console.error('❌ Error fetching students for bulk deletion:', fetchError);
+      throw new Error('Could not fetch students for deletion');
+    }
+
+    if (!studentsData || studentsData.length === 0) {
+      throw new Error('No students found for deletion');
+    }
+
+    const profileIds = studentsData.map(student => student.profile_id);
+
+    // Step 2: Delete all student records
+    const { error: studentsDeleteError } = await supabase
+      .from('students')
+      .delete()
+      .in('id', studentIds);
+
+    if (studentsDeleteError) {
+      console.error('❌ Error bulk deleting student records:', studentsDeleteError);
+      throw new Error('Failed to delete student records');
+    }
+
+    // Step 3: Delete all associated profiles
+    const { error: profilesDeleteError } = await supabase
+      .from('profiles')
+      .delete()
+      .in('id', profileIds);
+
+    if (profilesDeleteError) {
+      console.error('❌ Error bulk deleting profiles:', profilesDeleteError);
+      throw new Error('Students deleted but profile cleanup failed');
+    }
+
+    console.log(`✅ Successfully deleted ${studentIds.length} students and their profiles`);
+
+  } catch (error) {
+    console.error('💥 Error in deleteMultipleStudents:', error);
+    throw error;
+  }
+};
+
 // ============================================================================
 // COMING NEXT - Functions we'll add later
 // ============================================================================
 
-// export const deleteStudent = async (id: string): Promise<void> => { ... }
+// export const archiveStudent = async (id: string): Promise<void> => { ... }
+// export const restoreStudent = async (id: string): Promise<void> => { ... }

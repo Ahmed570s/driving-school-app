@@ -4,6 +4,7 @@
 export interface BasicStudent {
   id: string;
   name: string;
+  studentId: string; // Added for search functionality
   email: string;
   phone: string;
   group: "A" | "B" | "C" | "D" | "none";
