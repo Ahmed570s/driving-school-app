@@ -72,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsAuthenticated(false);
         setRole(null);
         setIsLoading(false);
-      }, 5000); // 5 second timeout
+      }, 3000); // 3 second timeout
       
       try {
         // Check if Supabase is properly configured

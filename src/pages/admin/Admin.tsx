@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Activity, Calendar, FileText, LogOut, Plus, Receipt, UserRound, Users, Clock, Medal, Settings, Check, ChevronsUpDown, UsersRound } from "lucide-react";
@@ -64,9 +64,13 @@ const instructors = ["Mike Brown", "Lisa Taylor", "James Wilson"];
 const Admin = () => {
   const {
     role,
+    isAuthenticated,
+    isLoading,
     logout
   } = useAuth();
   const navigate = useNavigate();
+
+  // All useState hooks must be at the top level
   const [activeSection, setActiveSection] = useState("dashboard");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [isNewStudent, setIsNewStudent] = useState(false);
@@ -85,12 +89,30 @@ const Admin = () => {
     notes: "",
   });
 
-  // Protect route - redirect if not admin
-  useState(() => {
-    if (role !== "admin") {
-      navigate("/");
+  // Protect admin route - redirect unauthenticated users
+  useEffect(() => {
+    if (!isLoading && (!isAuthenticated || role !== 'admin')) {
+      console.log('🔄 Admin access denied, redirecting to login');
+      navigate("/", { replace: true });
     }
-  });
+  }, [isAuthenticated, role, isLoading, navigate]);
+
+  // Show loading while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">Loading admin panel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render admin panel if not authenticated or not admin
+  if (!isAuthenticated || role !== 'admin') {
+    return null;
+  }
   
   const handleLogout = async () => {
     try {
