@@ -429,6 +429,12 @@ export const updateStudent = async (studentId: string, updates: Partial<Student>
 
       if (profileError) {
         console.error('❌ Profile update error:', profileError);
+        
+        // Check for duplicate email error
+        if (profileError.code === '23505' && profileError.message.includes('profiles_email_key')) {
+          throw new Error(`A user with email "${updates.email}" already exists. Please use a different email address.`);
+        }
+        
         throw profileError;
       }
     }
@@ -441,7 +447,7 @@ export const updateStudent = async (studentId: string, updates: Partial<Student>
     if (updates.currentPhase) studentUpdates.current_phase = updates.currentPhase;
     if (updates.totalCompletedSessions !== undefined) studentUpdates.total_hours_completed = updates.totalCompletedSessions;
     if (updates.enrollmentDate) studentUpdates.enrollment_date = updates.enrollmentDate;
-    if (updates.contractExpiryDate) studentUpdates.contract_expiry_date = updates.contractExpiryDate;
+    // Note: contract_expiry_date is a generated column (enrollment_date + 18 months) - cannot be updated manually
     if (updates.needsSupport !== undefined) studentUpdates.needs_support = updates.needsSupport;
     if (updates.attendanceIssues !== undefined) studentUpdates.attendance_issues = updates.attendanceIssues;
 
