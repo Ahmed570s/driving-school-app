@@ -799,10 +799,6 @@ const Calendar = () => {
   const prevWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
   const nextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
   
-  // Agenda navigation functions
-  const [agendaDay, setAgendaDay] = useState(new Date());
-  const prevAgendaDay = () => setAgendaDay(addDays(agendaDay, -1));
-  const nextAgendaDay = () => setAgendaDay(addDays(agendaDay, 1));
   
   // Filter classes by instructor
   const instructorClasses = dummyClasses.filter(cls => cls.instructor === instructor);
@@ -1301,99 +1297,6 @@ const Calendar = () => {
     );
   };
   
-  // Render agenda view (all instructors for selected day)
-  const renderAgendaView = () => {
-    return (
-      <div className="mt-4">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">{format(agendaDay, 'EEEE, MMMM d, yyyy')} - All Instructors</h2>
-          <div className="flex space-x-2">
-            <Button variant="outline" size="icon" onClick={prevAgendaDay}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" onClick={nextAgendaDay}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {instructors.map((instructorName) => {
-            const instructorClasses = dummyClasses.filter(cls => 
-              cls.instructor === instructorName && 
-              cls.date === format(agendaDay, 'yyyy-MM-dd')
-            );
-            const sortedClasses = instructorClasses.sort((a, b) => a.startTime.localeCompare(b.startTime));
-            
-            return (
-              <div key={instructorName} className="space-y-4">
-                <div className="flex items-center space-x-3 pb-3 border-b border-border/50">
-                  <UserRound className="h-5 w-5 text-primary" />
-                  <h3 className="text-lg font-semibold">{instructorName}</h3>
-                  <Badge variant="secondary" className="text-xs">
-                    {sortedClasses.length} {sortedClasses.length === 1 ? 'class' : 'classes'}
-                  </Badge>
-                </div>
-                
-                {sortedClasses.length === 0 ? (
-                  <div className="text-center py-8">
-                    <CalendarIcon className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">No classes scheduled</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {sortedClasses.map((cls) => (
-                      <Card 
-                        key={cls.id} 
-                        className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.02]"
-                        onClick={() => handleClassClick(cls)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <Badge 
-                                variant={cls.type === "Theory" ? "default" : "secondary"}
-                                className={cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"}
-                              >
-                                {cls.type}
-                              </Badge>
-                              <div className="text-right">
-                                <div className="text-lg font-bold text-foreground">{cls.startTime}</div>
-                                <div className="text-xs text-muted-foreground">{cls.duration}</div>
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <h4 className="font-semibold text-sm mb-1">{cls.className}</h4>
-                              <div className="flex items-center space-x-2 mb-2">
-                                <UserRound className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-xs font-medium">{cls.student}</span>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Users className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">{cls.group}</span>
-                              </div>
-                            </div>
-                            
-                            {cls.notes && (
-                              <div className="p-2 bg-muted/50 rounded-md">
-                                <p className="text-xs text-muted-foreground line-clamp-2">{cls.notes}</p>
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-  
   return (
     <PageLayout>
       <div className="flex justify-between items-center mb-6">
@@ -1573,12 +1476,12 @@ const Calendar = () => {
         <CardContent className="p-6">
           <div className="space-y-4">
             {/* Instructor Tabs with View Toggle */}
-            <Tabs defaultValue="Mike Brown" onValueChange={viewMode === "agenda" ? undefined : setInstructor}>
+            <Tabs defaultValue="Mike Brown" onValueChange={setInstructor}>
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
-                <TabsList className={viewMode === "agenda" ? "pointer-events-none opacity-50" : ""}>
-                  <TabsTrigger value="Mike Brown" disabled={viewMode === "agenda"}>Mike Brown</TabsTrigger>
-                  <TabsTrigger value="Lisa Taylor" disabled={viewMode === "agenda"}>Lisa Taylor</TabsTrigger>
-                  <TabsTrigger value="James Wilson" disabled={viewMode === "agenda"}>James Wilson</TabsTrigger>
+                <TabsList>
+                  <TabsTrigger value="Mike Brown">Mike Brown</TabsTrigger>
+                  <TabsTrigger value="Lisa Taylor">Lisa Taylor</TabsTrigger>
+                  <TabsTrigger value="James Wilson">James Wilson</TabsTrigger>
                 </TabsList>
                 
                 {/* View Mode Toggle */}
@@ -1586,14 +1489,12 @@ const Calendar = () => {
                   <ToggleGroupItem value="month" aria-label="Month view">Month</ToggleGroupItem>
                   <ToggleGroupItem value="week" aria-label="Week view">Week</ToggleGroupItem>
                   <ToggleGroupItem value="day" aria-label="Day view">Day</ToggleGroupItem>
-                  <ToggleGroupItem value="agenda" aria-label="Agenda view">Agenda</ToggleGroupItem>
                 </ToggleGroup>
               </div>
               
               {/* Calendar View */}
               {viewMode === "month" ? renderMonthView() : 
                viewMode === "week" ? renderWeekView() : 
-               viewMode === "agenda" ? renderAgendaView() : 
                renderDayView()}
             </Tabs>
           </div>
