@@ -597,6 +597,238 @@ export const deleteMultipleStudents = async (studentIds: string[]): Promise<void
 };
 
 // ============================================================================
+// SCHEDULING FUNCTIONS - For class scheduling and dropdowns
+// ============================================================================
+
+// Simplified student format for dropdowns and scheduling
+export interface StudentOption {
+  id: string;
+  name: string; // "First Last"
+  studentId: string; // DS2025001
+  email: string;
+  phone: string;
+  status: 'active' | 'on-hold' | 'completed' | 'dropped';
+  currentPhase: number;
+  isActive: boolean;
+}
+
+/**
+ * Get students in simplified format for scheduling dropdowns
+ * This is commonly used in class creation forms
+ */
+export const getStudentsForScheduling = async (): Promise<StudentOption[]> => {
+  try {
+    console.log('🔍 Fetching students for scheduling dropdowns...');
+
+    // Use the existing getStudents function and convert to simplified format
+    const allStudents = await getStudents();
+    
+    console.log(`✅ Converting ${allStudents.length} students to scheduling format`);
+    
+    // Convert full student objects to simplified options
+    // Only include active students for scheduling
+    const activeStudents = allStudents.filter(student => 
+      student.status === 'active' || student.status === 'on-hold'
+    );
+    
+    return activeStudents.map(student => ({
+      id: student.id,
+      name: `${student.firstName} ${student.lastName}`,
+      studentId: student.studentId,
+      email: student.email,
+      phone: student.phone,
+      status: student.status,
+      currentPhase: student.currentPhase,
+      isActive: student.status === 'active'
+    }));
+
+  } catch (error) {
+    console.error('💥 Error in getStudentsForScheduling:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get students enrolled in a specific group
+ * This is useful for theory class scheduling
+ */
+export const getStudentsByGroup = async (groupId: string): Promise<BasicStudent[]> => {
+  try {
+    console.log('🔍 Fetching students for group:', groupId);
+
+    const { data, error } = await supabase
+      .from('student_groups')
+      .select(`
+        student_id,
+        enrolled_at,
+        status,
+        students!inner (
+          id,
+          student_id,
+          current_phase,
+          total_hours_completed,
+          status,
+          has_balance,
+          has_missing_classes,
+          profiles!inner (
+            first_name,
+            last_name,
+            email,
+            phone
+          )
+        )
+      `)
+      .eq('group_id', groupId)
+      .eq('status', 'active');
+
+    if (error) {
+      console.error('❌ Error fetching students by group:', error);
+      throw new Error(`Failed to fetch students for group: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) {
+      console.log('📭 No students found in this group');
+      return [];
+    }
+
+    console.log(`✅ Successfully fetched ${data.length} students for group`);
+    
+    // Convert the joined data to BasicStudent format
+    return data.map((item: any) => {
+      const student = item.students;
+      return convertToBasicStudent(student);
+    });
+
+  } catch (error) {
+    console.error('💥 Error in getStudentsByGroup:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get available students for a specific class type
+ * This helps filter students based on their current phase and status
+ */
+export const getAvailableStudentsForClass = async (classType: 'theory' | 'practical'): Promise<StudentOption[]> => {
+  try {
+    console.log('🔍 Fetching available students for class type:', classType);
+
+    const allStudents = await getStudentsForScheduling();
+    
+    // Filter based on class type and student phase
+    const availableStudents = allStudents.filter(student => {
+      // Only active students can be scheduled
+      if (student.status !== 'active') return false;
+      
+      // For theory classes, students in any phase can attend
+      if (classType === 'theory') return true;
+      
+      // For practical classes, students should be in phase 2 or higher
+      if (classType === 'practical') return student.currentPhase >= 2;
+      
+      return true;
+    });
+
+    console.log(`✅ Found ${availableStudents.length} available students for ${classType} classes`);
+    return availableStudents;
+
+  } catch (error) {
+    console.error('💥 Error in getAvailableStudentsForClass:', error);
+    throw error;
+  }
+};
+
+/**
+ * Check if a student is available for scheduling at a specific time
+ * This will be useful for conflict detection
+ */
+export const checkStudentAvailability = async (
+  studentId: string, 
+  startTime: string, 
+  endTime: string
+): Promise<boolean> => {
+  try {
+    console.log('🔍 Checking student availability:', { studentId, startTime, endTime });
+
+    // Check if student has any classes during this time
+    const { data, error } = await supabase
+      .from('classes')
+      .select('id')
+      .eq('student_id', studentId)
+      .eq('status', 'scheduled')
+      .or(`and(start_time.lte.${startTime},end_time.gt.${startTime}),and(start_time.lt.${endTime},end_time.gte.${endTime}),and(start_time.gte.${startTime},end_time.lte.${endTime})`);
+
+    if (error) {
+      console.error('❌ Error checking student availability:', error);
+      throw new Error('Failed to check student availability');
+    }
+
+    const isAvailable = !data || data.length === 0;
+    console.log(`✅ Student availability check: ${isAvailable ? 'Available' : 'Busy'}`);
+    
+    return isAvailable;
+
+  } catch (error) {
+    console.error('💥 Error in checkStudentAvailability:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get student statistics for dashboard
+ */
+export const getStudentStats = async (): Promise<{
+  total: number;
+  active: number;
+  onHold: number;
+  completed: number;
+  dropped: number;
+  averagePhase: number;
+  averageHours: number;
+}> => {
+  try {
+    console.log('🔍 Fetching student statistics...');
+
+    // Use the existing getStudents function which we know works
+    const allStudents = await getStudents();
+    
+    // Calculate stats from the fetched students
+    const activeStudents = allStudents.filter(student => student.status === 'active');
+    const onHoldStudents = allStudents.filter(student => student.status === 'on-hold');
+    const completedStudents = allStudents.filter(student => student.status === 'completed');
+    const droppedStudents = allStudents.filter(student => student.status === 'dropped');
+    
+    const totalHours = allStudents.reduce((sum, student) => sum + student.totalHours, 0);
+    const totalPhases = allStudents.reduce((sum, student) => sum + student.currentPhase, 0);
+    
+    const averageHours = allStudents.length > 0 
+      ? Math.round((totalHours / allStudents.length) * 100) / 100
+      : 0;
+    
+    const averagePhase = allStudents.length > 0 
+      ? Math.round((totalPhases / allStudents.length) * 100) / 100
+      : 0;
+
+    const stats = {
+      total: allStudents.length,
+      active: activeStudents.length,
+      onHold: onHoldStudents.length,
+      completed: completedStudents.length,
+      dropped: droppedStudents.length,
+      averagePhase,
+      averageHours
+    };
+
+    console.log('✅ Successfully calculated student stats:', stats);
+    return stats;
+
+  } catch (error) {
+    console.error('💥 Error in getStudentStats:', error);
+    throw error;
+  }
+};
+
+// ============================================================================
 // COMING NEXT - Functions we'll add later
 // ============================================================================
 

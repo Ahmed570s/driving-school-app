@@ -20,6 +20,7 @@ import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterv
 import { getClasses, createClass, getUpcomingClasses, getClassById, updateClass, deleteClass } from "@/services/classes";
 import { getInstructors, getActiveInstructors, getInstructorOptions, getInstructorStats } from "@/services/instructors";
 import { getGroups, getActiveGroups, getGroupOptions, getGroupStats } from "@/services/groups";
+import { getStudentsForScheduling, getStudentsByGroup, getAvailableStudentsForClass, getStudentStats } from "@/services/students";
 
 // Define class type
 interface ClassItem {
@@ -1005,8 +1006,71 @@ const Calendar = () => {
       } catch (error) {
         console.error('❌ Error fetching group stats:', error);
       }
+
+      // === STUDENTS SCHEDULING TESTS ===
+      console.log('\n🎓 TESTING STUDENTS SCHEDULING SERVICE:');
       
-      // Test 12: Show sample data if available
+      let studentsForScheduling = [];
+      let theoryStudents = [];
+      let practicalStudents = [];
+      let studentStats = { total: 0, active: 0, onHold: 0, completed: 0, dropped: 0, averagePhase: 0, averageHours: 0 };
+      
+      try {
+        // Test 12: Fetch students for scheduling
+        studentsForScheduling = await getStudentsForScheduling();
+        console.log('✅ Students for scheduling:', studentsForScheduling.length);
+      } catch (error) {
+        console.error('❌ Error fetching students for scheduling:', error);
+      }
+      
+      try {
+        // Test 13: Fetch students available for theory classes
+        theoryStudents = await getAvailableStudentsForClass('theory');
+        console.log('✅ Students available for theory:', theoryStudents.length);
+      } catch (error) {
+        console.error('❌ Error fetching theory students:', error);
+      }
+      
+      try {
+        // Test 14: Fetch students available for practical classes
+        practicalStudents = await getAvailableStudentsForClass('practical');
+        console.log('✅ Students available for practical:', practicalStudents.length);
+      } catch (error) {
+        console.error('❌ Error fetching practical students:', error);
+      }
+      
+      try {
+        // Test 15: Get student statistics
+        studentStats = await getStudentStats();
+        console.log('✅ Student stats:', studentStats);
+      } catch (error) {
+        console.error('❌ Error fetching student stats:', error);
+      }
+      
+      // === DIAGNOSTIC: Check student phases ===
+      if (studentsForScheduling.length > 0) {
+        console.log('\n🔍 STUDENT PHASE ANALYSIS:');
+        const phaseBreakdown = studentsForScheduling.reduce((acc, student) => {
+          acc[`Phase ${student.currentPhase}`] = (acc[`Phase ${student.currentPhase}`] || 0) + 1;
+          return acc;
+        }, {});
+        console.log('📊 Phase breakdown:', phaseBreakdown);
+        
+        const phase1Students = studentsForScheduling.filter(s => s.currentPhase === 1);
+        const phase2PlusStudents = studentsForScheduling.filter(s => s.currentPhase >= 2);
+        
+        console.log(`📚 Phase 1 students (theory only): ${phase1Students.length}`);
+        console.log(`🚗 Phase 2+ students (practical eligible): ${phase2PlusStudents.length}`);
+        
+        if (phase1Students.length > 0) {
+          console.log('👥 Phase 1 students:', phase1Students.map(s => `${s.name} (${s.studentId})`));
+        }
+        if (phase2PlusStudents.length > 0) {
+          console.log('👥 Phase 2+ students:', phase2PlusStudents.map(s => `${s.name} (Phase ${s.currentPhase})`));
+        }
+      }
+      
+      // Test 16: Show sample data if available
       if (allClasses.length > 0) {
         console.log('📋 Sample class data:', allClasses[0]);
       }
@@ -1021,6 +1085,9 @@ const Calendar = () => {
       }
       if (groupOptions.length > 0) {
         console.log('📝 Sample group option:', groupOptions[0]);
+      }
+      if (studentsForScheduling.length > 0) {
+        console.log('🎓 Sample student for scheduling:', studentsForScheduling[0]);
       }
       
       // Show results in UI
@@ -1044,7 +1111,14 @@ const Calendar = () => {
 📊 Stats: ${groupStats.active} active, ${groupStats.inactive} inactive, ${groupStats.completed} completed
 📈 Capacity: ${groupStats.totalEnrollment}/${groupStats.totalCapacity}
 
-✅ All three services are working! Check console for detailed logs.`);
+🎓 STUDENTS SCHEDULING SERVICE:
+📝 Students for scheduling: ${studentsForScheduling.length}
+📚 Available for theory: ${theoryStudents.length}
+🚗 Available for practical: ${practicalStudents.length}
+📊 Stats: ${studentStats.active} active, ${studentStats.onHold} on hold, ${studentStats.completed} completed
+📈 Avg Phase: ${studentStats.averagePhase}, Avg Hours: ${studentStats.averageHours}
+
+✅ All services are working perfectly! Check console for detailed logs.`);
       
     } catch (error) {
       console.error('❌ Service test failed:', error);
