@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, parseISO, addDays } from "date-fns";
 import { getClasses, createClass, getUpcomingClasses, getClassById, updateClass, deleteClass } from "@/services/classes";
 import { getInstructors, getActiveInstructors, getInstructorOptions, getInstructorStats } from "@/services/instructors";
+import { getGroups, getActiveGroups, getGroupOptions, getGroupStats } from "@/services/groups";
 
 // Define class type
 interface ClassItem {
@@ -905,7 +906,7 @@ const Calendar = () => {
   // 🧪 TEMPORARY TEST FUNCTION - Remove this later
   const testServices = async () => {
     try {
-      console.log('🧪 Testing classes and instructors services...');
+      console.log('🧪 Testing classes, instructors, and groups services...');
       
       // === CLASSES SERVICE TESTS ===
       console.log('\n📚 TESTING CLASSES SERVICE:');
@@ -964,8 +965,48 @@ const Calendar = () => {
       } catch (error) {
         console.error('❌ Error fetching instructor stats:', error);
       }
+
+      // === GROUPS SERVICE TESTS ===
+      console.log('\n👥 TESTING GROUPS SERVICE:');
       
-      // Test 8: Show sample data if available
+      let allGroups = [];
+      let activeGroups = [];
+      let groupOptions = [];
+      let groupStats = { total: 0, active: 0, inactive: 0, completed: 0, totalCapacity: 0, totalEnrollment: 0, averageEnrollment: 0 };
+      
+      try {
+        // Test 8: Fetch all groups
+        allGroups = await getGroups();
+        console.log('✅ All groups:', allGroups.length);
+      } catch (error) {
+        console.error('❌ Error fetching all groups:', error);
+      }
+      
+      try {
+        // Test 9: Fetch active groups
+        activeGroups = await getActiveGroups();
+        console.log('✅ Active groups:', activeGroups.length);
+      } catch (error) {
+        console.error('❌ Error fetching active groups:', error);
+      }
+      
+      try {
+        // Test 10: Fetch group options (for dropdowns)
+        groupOptions = await getGroupOptions();
+        console.log('✅ Group options:', groupOptions.length);
+      } catch (error) {
+        console.error('❌ Error fetching group options:', error);
+      }
+      
+      try {
+        // Test 11: Get group statistics
+        groupStats = await getGroupStats();
+        console.log('✅ Group stats:', groupStats);
+      } catch (error) {
+        console.error('❌ Error fetching group stats:', error);
+      }
+      
+      // Test 12: Show sample data if available
       if (allClasses.length > 0) {
         console.log('📋 Sample class data:', allClasses[0]);
       }
@@ -974,6 +1015,12 @@ const Calendar = () => {
       }
       if (instructorOptions.length > 0) {
         console.log('📝 Sample instructor option:', instructorOptions[0]);
+      }
+      if (allGroups.length > 0) {
+        console.log('👥 Sample group data:', allGroups[0]);
+      }
+      if (groupOptions.length > 0) {
+        console.log('📝 Sample group option:', groupOptions[0]);
       }
       
       // Show results in UI
@@ -990,7 +1037,14 @@ const Calendar = () => {
 📝 Instructor options: ${instructorOptions.length}
 📊 Stats: ${instructorStats.active} active, ${instructorStats.inactive} inactive, ${instructorStats.onLeave} on leave
 
-✅ Both services are working! Check console for detailed logs.`);
+👥 GROUPS SERVICE:
+📚 Total groups: ${allGroups.length}
+✅ Active groups: ${activeGroups.length}
+📝 Group options: ${groupOptions.length}
+📊 Stats: ${groupStats.active} active, ${groupStats.inactive} inactive, ${groupStats.completed} completed
+📈 Capacity: ${groupStats.totalEnrollment}/${groupStats.totalCapacity}
+
+✅ All three services are working! Check console for detailed logs.`);
       
     } catch (error) {
       console.error('❌ Service test failed:', error);
