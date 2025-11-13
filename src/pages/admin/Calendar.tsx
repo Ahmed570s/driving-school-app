@@ -17,6 +17,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, parseISO, addDays } from "date-fns";
+import { getClasses, createClass, getUpcomingClasses, getClassById, updateClass, deleteClass } from "@/services/classes";
+import { getInstructors, getActiveInstructors, getInstructorOptions, getInstructorStats } from "@/services/instructors";
 
 // Define class type
 interface ClassItem {
@@ -899,6 +901,102 @@ const Calendar = () => {
     });
     setModalOpen(false);
   };
+
+  // 🧪 TEMPORARY TEST FUNCTION - Remove this later
+  const testServices = async () => {
+    try {
+      console.log('🧪 Testing classes and instructors services...');
+      
+      // === CLASSES SERVICE TESTS ===
+      console.log('\n📚 TESTING CLASSES SERVICE:');
+      
+      // Test 1: Fetch all classes
+      const allClasses = await getClasses();
+      console.log('✅ All classes:', allClasses.length);
+      
+      // Test 2: Fetch upcoming classes
+      const upcoming = await getUpcomingClasses();
+      console.log('✅ Upcoming classes:', upcoming.length);
+      
+      // Test 3: Fetch by date range (May 2025)
+      const mayClasses = await getClasses({
+        startDate: '2025-05-01',
+        endDate: '2025-05-31'
+      });
+      console.log('✅ May 2025 classes:', mayClasses.length);
+      
+      // === INSTRUCTORS SERVICE TESTS ===
+      console.log('\n👨‍🏫 TESTING INSTRUCTORS SERVICE:');
+      
+      let allInstructors = [];
+      let activeInstructors = [];
+      let instructorOptions = [];
+      let instructorStats = { total: 0, active: 0, inactive: 0, onLeave: 0 };
+      
+      try {
+        // Test 4: Fetch all instructors
+        allInstructors = await getInstructors();
+        console.log('✅ All instructors:', allInstructors.length);
+      } catch (error) {
+        console.error('❌ Error fetching all instructors:', error);
+      }
+      
+      try {
+        // Test 5: Fetch active instructors
+        activeInstructors = await getActiveInstructors();
+        console.log('✅ Active instructors:', activeInstructors.length);
+      } catch (error) {
+        console.error('❌ Error fetching active instructors:', error);
+      }
+      
+      try {
+        // Test 6: Fetch instructor options (for dropdowns)
+        instructorOptions = await getInstructorOptions();
+        console.log('✅ Instructor options:', instructorOptions.length);
+      } catch (error) {
+        console.error('❌ Error fetching instructor options:', error);
+      }
+      
+      try {
+        // Test 7: Get instructor statistics
+        instructorStats = await getInstructorStats();
+        console.log('✅ Instructor stats:', instructorStats);
+      } catch (error) {
+        console.error('❌ Error fetching instructor stats:', error);
+      }
+      
+      // Test 8: Show sample data if available
+      if (allClasses.length > 0) {
+        console.log('📋 Sample class data:', allClasses[0]);
+      }
+      if (allInstructors.length > 0) {
+        console.log('👨‍🏫 Sample instructor data:', allInstructors[0]);
+      }
+      if (instructorOptions.length > 0) {
+        console.log('📝 Sample instructor option:', instructorOptions[0]);
+      }
+      
+      // Show results in UI
+      alert(`🧪 Service Test Results:
+
+📚 CLASSES SERVICE:
+📊 Total classes: ${allClasses.length}
+⏰ Upcoming classes: ${upcoming.length}  
+📅 May 2025 classes: ${mayClasses.length}
+
+👨‍🏫 INSTRUCTORS SERVICE:
+👥 Total instructors: ${allInstructors.length}
+✅ Active instructors: ${activeInstructors.length}
+📝 Instructor options: ${instructorOptions.length}
+📊 Stats: ${instructorStats.active} active, ${instructorStats.inactive} inactive, ${instructorStats.onLeave} on leave
+
+✅ Both services are working! Check console for detailed logs.`);
+      
+    } catch (error) {
+      console.error('❌ Service test failed:', error);
+      alert(`❌ Test failed: ${error.message}\n\nCheck console for details.`);
+    }
+  };
   
   // Generate weekly view days (current week)
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
@@ -1301,10 +1399,16 @@ const Calendar = () => {
     <PageLayout>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Calendar</h1>
-        <Button onClick={() => setModalOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Create Class
-        </Button>
+        <div className="flex gap-2">
+          {/* 🧪 TEMPORARY TEST BUTTON - Remove this later */}
+          <Button variant="outline" onClick={testServices}>
+            🧪 Test Services
+          </Button>
+          <Button onClick={() => setModalOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Create Class
+          </Button>
+        </div>
       </div>
 
       {/* Simple Add Class Dialog - Following Add Instructor pattern */}
