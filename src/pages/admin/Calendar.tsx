@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { PageLayout } from "@/components/ui/page-layout";
 import { Button } from "@/components/ui/button";
 import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, Bookmark, UserRound, Calendar as CalendarIcon, AlertTriangle, Check, ChevronsUpDown } from "lucide-react";
@@ -17,12 +17,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, parseISO, addDays } from "date-fns";
-import { getClasses, createClass, getUpcomingClasses, getClassById, updateClass, deleteClass } from "@/services/classes";
-import { getInstructors, getActiveInstructors, getInstructorOptions, getInstructorStats } from "@/services/instructors";
-import { getGroups, getActiveGroups, getGroupOptions, getGroupStats } from "@/services/groups";
-import { getStudentsForScheduling, getStudentsByGroup, getAvailableStudentsForClass, getStudentStats } from "@/services/students";
+import { getClasses, createClass, getUpcomingClasses, getClassById, updateClass, deleteClass, ClassItem as ServiceClassItem } from "@/services/classes";
+import { getInstructors, getActiveInstructors, getInstructorOptions, getInstructorStats, Instructor } from "@/services/instructors";
+import { getGroups, getActiveGroups, getGroupOptions, getGroupStats, Group } from "@/services/groups";
+import { getStudentsForScheduling, getStudentsByGroup, getAvailableStudentsForClass, getStudentStats, StudentOption } from "@/services/students";
 
-// Define class type
+// Define class type for UI compatibility (will be replaced with ServiceClassItem)
 interface ClassItem {
   id: number;
   student: string;
@@ -50,718 +50,11 @@ interface ClassFormData {
   notes: string;
 }
 
-// Dummy data for students
-const dummyStudents = [
-  { id: 1, name: "Emma Wilson", group: "Group A", phone: "(555) 123-4567" },
-  { id: 2, name: "John Smith", group: "Group B", phone: "(555) 234-5678" },
-  { id: 3, name: "Sophia Garcia", group: "Group C", phone: "(555) 345-6789" },
-  { id: 4, name: "Michael Johnson", group: "Group A", phone: "(555) 456-7890" },
-  { id: 5, name: "Olivia Brown", group: "Group B", phone: "(555) 567-8901" },
-  { id: 6, name: "David Lee", group: "Group C", phone: "(555) 678-9012" },
-  { id: 7, name: "Ava Martinez", group: "Group A", phone: "(555) 789-0123" },
-  { id: 8, name: "James Wilson", group: "Group B", phone: "(555) 890-1234" },
-  { id: 9, name: "Tyler Rodriguez", group: "Group A", phone: "(555) 234-5678" },
-  { id: 10, name: "Isabella Lopez", group: "Group B", phone: "(555) 345-6789" },
-  { id: 11, name: "Mason Clark", group: "Group C", phone: "(555) 456-7890" },
-  { id: 12, name: "Abigail Turner", group: "Group A", phone: "(555) 567-8901" },
-];
-
-// Dummy data for groups
-const dummyGroups = [
-  { id: "Group A", name: "Group A", studentCount: 4 },
-  { id: "Group B", name: "Group B", studentCount: 4 },
-  { id: "Group C", name: "Group C", studentCount: 4 },
-];
-
-// Instructors list
-const instructors = ["Mike Brown", "Lisa Taylor", "James Wilson"];
-
 // Duration options
 const durationOptions = [
   { value: 60, label: "60 minutes" },
   { value: 90, label: "90 minutes" },
   { value: 120, label: "120 minutes" },
-];
-
-// Expanded dummy data for calendar events
-const dummyClasses: ClassItem[] = [
-  // May 2025 classes
-  { 
-    id: 101, 
-    student: "Emma Wilson", 
-    date: "2025-05-05", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 123-4567", 
-    instructor: "Mike Brown",
-    className: "Basic Maneuvers",
-    type: "Practical",
-    group: "Group A",
-    duration: "1 hour",
-    notes: "Focus on parking techniques and three-point turns. Student needs extra practice with parallel parking."
-  },
-  { 
-    id: 102, 
-    student: "John Smith", 
-    date: "2025-05-05", 
-    startTime: "14:00", 
-    endTime: "15:00", 
-    phone: "(555) 234-5678", 
-    instructor: "Mike Brown",
-    className: "Highway Driving",
-    type: "Practical",
-    group: "Group B",
-    duration: "1 hour",
-    notes: "First highway session. Cover merging, lane changes, and maintaining safe distances."
-  },
-  // Additional class for May 5th to test "+X more" functionality
-  { 
-    id: 115, 
-    student: "Thomas Johnson", 
-    date: "2025-05-05", 
-    startTime: "16:00", 
-    endTime: "17:00", 
-    phone: "(555) 111-2222", 
-    instructor: "Mike Brown",
-    className: "Parking Practice",
-    type: "Practical",
-    group: "Group A",
-    duration: "1 hour",
-    notes: "Focused session on parallel parking and reverse parking techniques."
-  },
-  // Another class for May 5th
-  { 
-    id: 116, 
-    student: "Sarah Miller", 
-    date: "2025-05-05", 
-    startTime: "18:00", 
-    endTime: "19:00", 
-    phone: "(555) 333-4444", 
-    instructor: "Mike Brown",
-    className: "City Driving",
-    type: "Practical",
-    group: "Group B",
-    duration: "1 hour",
-    notes: "Practice navigating through busy city streets and handling traffic lights."
-  },
-  { 
-    id: 103, 
-    student: "Sophia Garcia", 
-    date: "2025-05-07", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 345-6789", 
-    instructor: "Lisa Taylor",
-    className: "Road Signs",
-    type: "Theory",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Review all regulatory, warning, and guide signs. Will include a mini-quiz at the end."
-  },
-  { 
-    id: 104, 
-    student: "Michael Johnson", 
-    date: "2025-05-08", 
-    startTime: "13:00", 
-    endTime: "14:00", 
-    phone: "(555) 456-7890", 
-    instructor: "James Wilson",
-    className: "Night Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "1 hour",
-    notes: "Preparation for driving in low-light conditions. Emphasis on proper use of headlights and visibility awareness."
-  },
-  { 
-    id: 105, 
-    student: "Olivia Brown", 
-    date: "2025-05-12", 
-    startTime: "11:00", 
-    endTime: "13:00", 
-    phone: "(555) 567-8901", 
-    instructor: "Lisa Taylor",
-    className: "Traffic Rules",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Comprehensive review of right-of-way rules, traffic signals, and special traffic situations."
-  },
-  { 
-    id: 106, 
-    student: "David Lee", 
-    date: "2025-05-14", 
-    startTime: "15:00", 
-    endTime: "16:00", 
-    phone: "(555) 678-9012", 
-    instructor: "James Wilson",
-    className: "Urban Driving",
-    type: "Practical",
-    group: "Group C",
-    duration: "1 hour",
-    notes: "City center navigation focusing on one-way streets, traffic circles, and busy intersections."
-  },
-  { 
-    id: 107, 
-    student: "Ava Martinez", 
-    date: "2025-05-15", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 789-0123", 
-    instructor: "Mike Brown",
-    className: "Defensive Driving",
-    type: "Theory",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Techniques for anticipating hazards and driving defensively. Will include video examples of common scenarios."
-  },
-  { 
-    id: 108, 
-    student: "James Wilson", 
-    date: "2025-05-19", 
-    startTime: "14:00", 
-    endTime: "15:00", 
-    phone: "(555) 890-1234", 
-    instructor: "Lisa Taylor",
-    className: "Final Assessment",
-    type: "Practical",
-    group: "Group B",
-    duration: "1 hour",
-    notes: "Pre-exam evaluation to identify any remaining areas for improvement before the official test."
-  },
-  { 
-    id: 109, 
-    student: "Tyler Rodriguez", 
-    date: "2025-05-21", 
-    startTime: "09:00", 
-    endTime: "10:00", 
-    phone: "(555) 234-5678", 
-    instructor: "Mike Brown",
-    className: "Intro to Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "1 hour",
-    notes: "First driving lesson. Familiarization with vehicle controls and basic operations."
-  },
-  { 
-    id: 110, 
-    student: "Isabella Lopez", 
-    date: "2025-05-21", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 345-6789", 
-    instructor: "Mike Brown",
-    className: "Driving Laws",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Overview of state driving laws and regulations."
-  },
-  { 
-    id: 111, 
-    student: "Mason Clark", 
-    date: "2025-05-22", 
-    startTime: "10:00", 
-    endTime: "11:00", 
-    phone: "(555) 456-7890", 
-    instructor: "Mike Brown",
-    className: "Parking Skills",
-    type: "Practical",
-    group: "Group C",
-    duration: "1 hour",
-    notes: "Focus on parallel parking, reverse parking, and angle parking techniques."
-  },
-  { 
-    id: 112, 
-    student: "Abigail Turner", 
-    date: "2025-05-26", 
-    startTime: "09:00", 
-    endTime: "10:00", 
-    phone: "(555) 567-8901", 
-    instructor: "Mike Brown",
-    className: "Lane Changes",
-    type: "Practical",
-    group: "Group A",
-    duration: "1 hour",
-    notes: "Practicing safe lane changes, mirror checks, and blind spot awareness."
-  },
-  { 
-    id: 113, 
-    student: "Ethan Adams", 
-    date: "2025-05-28", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 678-9012", 
-    instructor: "Mike Brown",
-    className: "Road Safety",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Discussion on road safety principles and accident prevention strategies."
-  },
-  { 
-    id: 114, 
-    student: "Mia Scott", 
-    date: "2025-05-30", 
-    startTime: "09:00", 
-    endTime: "10:00", 
-    phone: "(555) 789-0123", 
-    instructor: "Mike Brown",
-    className: "Highway Entry & Exit",
-    type: "Practical",
-    group: "Group C",
-    duration: "1 hour",
-    notes: "Practice entering and exiting highways safely using acceleration and deceleration lanes."
-  },
-  // Original July 2024 classes
-  { 
-    id: 1, 
-    student: "Emma Wilson", 
-    date: "2024-07-15", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 123-4567", 
-    instructor: "Mike Brown",
-    className: "Basic Maneuvers",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Focus on parking techniques and three-point turns. Student needs extra practice with parallel parking."
-  },
-  { 
-    id: 2, 
-    student: "John Smith", 
-    date: "2024-07-15", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 234-5678", 
-    instructor: "Mike Brown",
-    className: "Highway Driving",
-    type: "Practical",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "First highway session. Cover merging, lane changes, and maintaining safe distances."
-  },
-  { 
-    id: 3, 
-    student: "Sophia Garcia", 
-    date: "2024-07-16", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 345-6789", 
-    instructor: "Lisa Taylor",
-    className: "Road Signs",
-    type: "Theory",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Review all regulatory, warning, and guide signs. Will include a mini-quiz at the end."
-  },
-  { 
-    id: 4, 
-    student: "Michael Johnson", 
-    date: "2024-07-17", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 456-7890", 
-    instructor: "James Wilson",
-    className: "Night Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Preparation for driving in low-light conditions. Emphasis on proper use of headlights and visibility awareness."
-  },
-  { 
-    id: 5, 
-    student: "Olivia Brown", 
-    date: "2024-07-18", 
-    startTime: "11:00", 
-    endTime: "13:00", 
-    phone: "(555) 567-8901", 
-    instructor: "Lisa Taylor",
-    className: "Traffic Rules",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Comprehensive review of right-of-way rules, traffic signals, and special traffic situations."
-  },
-  { 
-    id: 6, 
-    student: "David Lee", 
-    date: "2024-07-19", 
-    startTime: "15:00", 
-    endTime: "17:00", 
-    phone: "(555) 678-9012", 
-    instructor: "James Wilson",
-    className: "Urban Driving",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "City center navigation focusing on one-way streets, traffic circles, and busy intersections."
-  },
-  { 
-    id: 7, 
-    student: "Ava Martinez", 
-    date: "2024-07-22", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 789-0123", 
-    instructor: "Mike Brown",
-    className: "Defensive Driving",
-    type: "Theory",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Techniques for anticipating hazards and driving defensively. Will include video examples of common scenarios."
-  },
-  { 
-    id: 8, 
-    student: "James Wilson", 
-    date: "2024-07-23", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 890-1234", 
-    instructor: "Lisa Taylor",
-    className: "Final Assessment",
-    type: "Practical",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Pre-exam evaluation to identify any remaining areas for improvement before the official test."
-  },
-  // Additional classes
-  { 
-    id: 9, 
-    student: "Tyler Rodriguez", 
-    date: "2024-07-02", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 234-5678", 
-    instructor: "Mike Brown",
-    className: "Intro to Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "First driving lesson. Familiarization with vehicle controls and basic operations."
-  },
-  { 
-    id: 10, 
-    student: "Isabella Lopez", 
-    date: "2024-07-02", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 345-6789", 
-    instructor: "Lisa Taylor",
-    className: "Driving Laws",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Overview of state driving laws and regulations."
-  },
-  { 
-    id: 11, 
-    student: "Mason Clark", 
-    date: "2024-07-03", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 456-7890", 
-    instructor: "James Wilson",
-    className: "Parking Skills",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Focus on parallel parking, reverse parking, and angle parking techniques."
-  },
-  { 
-    id: 12, 
-    student: "Abigail Turner", 
-    date: "2024-07-04", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 567-8901", 
-    instructor: "Mike Brown",
-    className: "Lane Changes",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Practicing safe lane changes, mirror checks, and blind spot awareness."
-  },
-  { 
-    id: 13, 
-    student: "Ethan Adams", 
-    date: "2024-07-05", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 678-9012", 
-    instructor: "Lisa Taylor",
-    className: "Road Safety",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Discussion on road safety principles and accident prevention strategies."
-  },
-  { 
-    id: 14, 
-    student: "Mia Scott", 
-    date: "2024-07-08", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 789-0123", 
-    instructor: "James Wilson",
-    className: "Highway Entry & Exit",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Practice entering and exiting highways safely using acceleration and deceleration lanes."
-  },
-  { 
-    id: 15, 
-    student: "Noah Green", 
-    date: "2024-07-09", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 890-1234", 
-    instructor: "Mike Brown",
-    className: "Emergency Maneuvers",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Learning how to handle emergency situations, including sudden stops and obstacle avoidance."
-  },
-  { 
-    id: 16, 
-    student: "Charlotte King", 
-    date: "2024-07-10", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 901-2345", 
-    instructor: "Lisa Taylor",
-    className: "Weather Conditions",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Understanding how to adjust driving techniques for different weather conditions."
-  },
-  { 
-    id: 17, 
-    student: "Lucas Wright", 
-    date: "2024-07-11", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 012-3456", 
-    instructor: "James Wilson",
-    className: "City Navigation",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Navigating through busy city streets and handling complex intersections."
-  },
-  { 
-    id: 18, 
-    student: "Amelia Cooper", 
-    date: "2024-07-12", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 123-4567", 
-    instructor: "Mike Brown",
-    className: "Vehicle Maintenance",
-    type: "Theory",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Basic vehicle maintenance and pre-drive inspection procedures."
-  },
-  { 
-    id: 19, 
-    student: "Henry Reed", 
-    date: "2024-07-12", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 234-5678", 
-    instructor: "Lisa Taylor",
-    className: "Fuel Efficiency",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Techniques for fuel-efficient driving and reducing carbon footprint."
-  },
-  { 
-    id: 20, 
-    student: "Ella Baker", 
-    date: "2024-07-15", 
-    startTime: "13:00", 
-    endTime: "14:30", 
-    phone: "(555) 345-6789", 
-    instructor: "James Wilson",
-    className: "Parking Practice",
-    type: "Practical",
-    group: "Group C",
-    duration: "1.5 hours",
-    notes: "Additional practice on various parking techniques in different scenarios."
-  },
-  { 
-    id: 21, 
-    student: "Alexander Cook", 
-    date: "2024-07-16", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 456-7890", 
-    instructor: "Mike Brown",
-    className: "Residential Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Navigating residential areas with focus on school zones and pedestrian awareness."
-  },
-  { 
-    id: 22, 
-    student: "Scarlett Morgan", 
-    date: "2024-07-17", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 567-8901", 
-    instructor: "Lisa Taylor",
-    className: "Night Driving Theory",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Theoretical aspects of night driving before practical application."
-  },
-  { 
-    id: 23, 
-    student: "Jack Murphy", 
-    date: "2024-07-18", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 678-9012", 
-    instructor: "James Wilson",
-    className: "Defensive Techniques",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Practical application of defensive driving techniques in real-world scenarios."
-  },
-  { 
-    id: 24, 
-    student: "Sofia Peterson", 
-    date: "2024-07-19", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 789-0123", 
-    instructor: "Mike Brown",
-    className: "Highway Merging",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Advanced highway merging techniques with heavy traffic simulation."
-  },
-  { 
-    id: 25, 
-    student: "Leo Phillips", 
-    date: "2024-07-19", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 890-1234", 
-    instructor: "Lisa Taylor",
-    className: "Traffic Law Updates",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Recent updates to traffic laws and regulations."
-  },
-  { 
-    id: 26, 
-    student: "Riley Campbell", 
-    date: "2024-07-22", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 901-2345", 
-    instructor: "James Wilson",
-    className: "Rural Driving",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Driving on rural roads, handling gravel surfaces, and wildlife awareness."
-  },
-  { 
-    id: 27, 
-    student: "Elijah Hayes", 
-    date: "2024-07-23", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 012-3456", 
-    instructor: "Mike Brown",
-    className: "Motorway Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Advanced motorway driving techniques and high-speed safety."
-  },
-  { 
-    id: 28, 
-    student: "Avery Ross", 
-    date: "2024-07-24", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 123-4567", 
-    instructor: "Lisa Taylor",
-    className: "Pre-Test Review",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Comprehensive review of all theoretical topics before the final exam."
-  },
-  { 
-    id: 29, 
-    student: "Benjamin Long", 
-    date: "2024-07-25", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 234-5678", 
-    instructor: "James Wilson",
-    className: "Final Route Practice",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Practice driving on potential test routes for the final examination."
-  },
-  { 
-    id: 30, 
-    student: "Luna Carter", 
-    date: "2024-07-26", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 345-6789", 
-    instructor: "Mike Brown",
-    className: "Mock Test",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Full mock driving test under examination conditions."
-  },
-  { 
-    id: 31, 
-    student: "Gabriel Rivera", 
-    date: "2024-07-29", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 456-7890", 
-    instructor: "Lisa Taylor",
-    className: "Test Debrief",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Discussion of common test mistakes and final tips for success."
-  },
-  { 
-    id: 32, 
-    student: "Stella Ward", 
-    date: "2024-07-30", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 567-8901", 
-    instructor: "James Wilson",
-    className: "Confidence Building",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Building confidence for nervous students before their final test."
-  }
 ];
 
 const Calendar = () => {
@@ -772,6 +65,29 @@ const Calendar = () => {
   const [viewMode, setViewMode] = useState("month");
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  // ============================================================================
+  // REAL DATA STATE MANAGEMENT - Replace mock data with real state
+  // ============================================================================
+  
+  // Classes data from database
+  const [classes, setClasses] = useState<ServiceClassItem[]>([]);
+  const [classesLoading, setClassesLoading] = useState(true);
+  
+  // Instructors data from database  
+  const [instructors, setInstructors] = useState<Instructor[]>([]);
+  const [instructorsLoading, setInstructorsLoading] = useState(true);
+  
+  // Students data for dropdowns
+  const [students, setStudents] = useState<StudentOption[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(true);
+  
+  // Groups data for dropdowns
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  
+  // Overall loading state
+  const [loading, setLoading] = useState(true);
   
   // Add Class Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -779,85 +95,65 @@ const Calendar = () => {
   const [formData, setFormData] = useState<ClassFormData>({
     type: "",
     date: format(new Date(), 'yyyy-MM-dd'),
-    startTime: "10:00",
+    startTime: "",
     duration: 60,
     instructor: "",
     selectedStudents: [],
     selectedGroup: "",
-    notes: "",
+    notes: ""
   });
-  
-  // Get days for current month
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  
-  // Navigation functions
-  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
-  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
-  const prevDay = () => setSelectedDay(addDays(selectedDay, -1));
-  const nextDay = () => setSelectedDay(addDays(selectedDay, 1));
-  
-  // Weekly navigation functions
+
+  // Week view state
   const [currentWeekStart, setCurrentWeekStart] = useState(new Date(2025, 4, 18)); // May 18, 2025
   const prevWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
   const nextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
   
+  // Filter classes by instructor (temporary - will be replaced with real data filtering)
+  const instructorClasses: ClassItem[] = []; // Empty for now, will be populated from real data
   
-  // Filter classes by instructor
-  const instructorClasses = dummyClasses.filter(cls => cls.instructor === instructor);
-  
-  // Get classes for a specific day
+  // Get classes for a specific day (temporary - will be replaced with real data filtering)
   const getClassesForDay = (day: Date) => {
     const dateString = format(day, 'yyyy-MM-dd');
     return instructorClasses.filter(cls => cls.date === dateString);
   };
-  
-  // Get classes for selected date in form
+
+  // Get classes for selected date in form (temporary - will be replaced with real data filtering)
   const getClassesForSelectedDate = () => {
-    return dummyClasses.filter(cls => cls.date === formData.date);
+    return instructorClasses.filter(cls => cls.date === formData.date);
   };
   
-  // Check instructor availability
+  // Check instructor availability (temporary - will be replaced with real conflict checking)
   const checkInstructorConflict = () => {
     if (!formData.instructor || !formData.date || !formData.startTime) return null;
     
-    const conflictingClass = dummyClasses.find(cls => 
+    const conflictingClass = instructorClasses.find(cls => 
       cls.instructor === formData.instructor && 
       cls.date === formData.date && 
       cls.startTime === formData.startTime
     );
     
-    return conflictingClass;
+    return conflictingClass || null;
   };
-  
-  // Get students for selected group
+
+  // Get students for selected group (temporary - will be replaced with real data filtering)
   const getStudentsForGroup = (groupId: string) => {
-    return dummyStudents.filter(student => student.group === groupId);
+    return students.filter(student => 
+      groups.find(group => group.id === groupId)?.name === groupId
+    );
   };
   
   // Handle form field changes
   const handleFormChange = (field: keyof ClassFormData, value: any) => {
     setFormData(prev => ({
       ...prev,
-      [field]: value,
-      // Reset student selection when group is selected and vice versa
-      ...(field === 'selectedGroup' && value ? { selectedStudents: [] } : {}),
-      ...(field === 'selectedStudents' && value.length > 0 ? { selectedGroup: "" } : {}),
+      [field]: value
     }));
   };
-  
-  // Handle student selection
-  const handleStudentToggle = (studentName: string) => {
-    const updatedStudents = formData.selectedStudents.includes(studentName)
-      ? formData.selectedStudents.filter(s => s !== studentName)
-      : [...formData.selectedStudents, studentName];
-    
-    handleFormChange('selectedStudents', updatedStudents);
-  };
-  
+
   // Calculate end time based on start time and duration
   const calculateEndTime = (startTime: string, duration: number) => {
+    if (!startTime) return "";
+    
     const [hours, minutes] = startTime.split(':').map(Number);
     const startDate = new Date();
     startDate.setHours(hours, minutes, 0, 0);
@@ -865,187 +161,98 @@ const Calendar = () => {
     const endDate = new Date(startDate.getTime() + duration * 60000);
     return format(endDate, 'HH:mm');
   };
-  
-  // Get active students (either selected manually or from group)
-  const getActiveStudents = () => {
-    if (formData.selectedGroup) {
+
+  // Get students based on class type and group selection
+  const getAvailableStudents = () => {
+    if (formData.type === "Theory" && formData.selectedGroup) {
       return getStudentsForGroup(formData.selectedGroup);
     }
-    return dummyStudents.filter(student => formData.selectedStudents.includes(student.name));
+    return students.filter(student => formData.selectedStudents.includes(student.name));
   };
   
-  // Handle form submission
+  // Handle form submission (temporary - will be replaced with real class creation)
   const handleSubmit = () => {
     // Basic validation
-    if (!formData.type || !formData.date || !formData.instructor) {
+    if (!formData.type || !formData.date || !formData.startTime || !formData.instructor) {
       alert("Please fill in all required fields");
       return;
     }
-    
-    if (!formData.selectedGroup && formData.selectedStudents.length === 0) {
-      alert("Please select students or a group");
+
+    if (formData.type === "Theory" && !formData.selectedGroup) {
+      alert("Please select a group for theory class");
       return;
     }
-    
-    // Show success message
-    alert("Class created successfully!");
+
+    if (formData.type === "Practical" && formData.selectedStudents.length === 0) {
+      alert("Please select a student for practical class");
+      return;
+    }
+
+    // Check for conflicts
+    const conflict = checkInstructorConflict();
+    if (conflict) {
+      alert(`Instructor ${formData.instructor} is already booked at ${formData.startTime} on ${formData.date}`);
+      return;
+    }
+
+    // TODO: Replace with real class creation using createClass service
+    console.log("Creating class:", formData);
     
     // Reset form and close modal
     setFormData({
       type: "",
       date: format(new Date(), 'yyyy-MM-dd'),
-      startTime: "10:00",
+      startTime: "",
       duration: 60,
       instructor: "",
       selectedStudents: [],
       selectedGroup: "",
-      notes: "",
+      notes: ""
     });
     setModalOpen(false);
   };
 
-  // 🧪 TEMPORARY TEST FUNCTION - Remove this later
+  // Navigation functions
+  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
+  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  const prevDay = () => setSelectedDay(addDays(selectedDay, -1));
+  const nextDay = () => setSelectedDay(addDays(selectedDay, 1));
+
+  // Get days for month view
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+
+  // Test Services Function (temporary - for testing the service layer)
   const testServices = async () => {
+    console.log('🧪 Testing all service layers...');
+    
     try {
-      console.log('🧪 Testing classes, instructors, and groups services...');
-      
-      // === CLASSES SERVICE TESTS ===
-      console.log('\n📚 TESTING CLASSES SERVICE:');
-      
-      // Test 1: Fetch all classes
+      // Test classes service
       const allClasses = await getClasses();
-      console.log('✅ All classes:', allClasses.length);
+      console.log('✅ Classes service:', allClasses.length, 'classes found');
       
-      // Test 2: Fetch upcoming classes
-      const upcoming = await getUpcomingClasses();
-      console.log('✅ Upcoming classes:', upcoming.length);
+      // Test instructors service  
+      const allInstructors = await getInstructors();
+      console.log('✅ Instructors service:', allInstructors.length, 'instructors found');
       
-      // Test 3: Fetch by date range (May 2025)
-      const mayClasses = await getClasses({
-        startDate: '2025-05-01',
-        endDate: '2025-05-31'
-      });
-      console.log('✅ May 2025 classes:', mayClasses.length);
+      // Test groups service
+      const allGroups = await getGroups();
+      console.log('✅ Groups service:', allGroups.length, 'groups found');
       
-      // === INSTRUCTORS SERVICE TESTS ===
-      console.log('\n👨‍🏫 TESTING INSTRUCTORS SERVICE:');
+      // Test students service
+      const studentsForScheduling = await getStudentsForScheduling();
+      console.log('✅ Students service:', studentsForScheduling.length, 'students found');
       
-      let allInstructors = [];
-      let activeInstructors = [];
-      let instructorOptions = [];
-      let instructorStats = { total: 0, active: 0, inactive: 0, onLeave: 0 };
+      // Test availability functions
+      const theoryStudents = await getAvailableStudentsForClass('theory');
+      const practicalStudents = await getAvailableStudentsForClass('practical');
+      console.log('✅ Students available for theory:', theoryStudents.length);
+      console.log('✅ Students available for practical:', practicalStudents.length);
       
-      try {
-        // Test 4: Fetch all instructors
-        allInstructors = await getInstructors();
-        console.log('✅ All instructors:', allInstructors.length);
-      } catch (error) {
-        console.error('❌ Error fetching all instructors:', error);
-      }
-      
-      try {
-        // Test 5: Fetch active instructors
-        activeInstructors = await getActiveInstructors();
-        console.log('✅ Active instructors:', activeInstructors.length);
-      } catch (error) {
-        console.error('❌ Error fetching active instructors:', error);
-      }
-      
-      try {
-        // Test 6: Fetch instructor options (for dropdowns)
-        instructorOptions = await getInstructorOptions();
-        console.log('✅ Instructor options:', instructorOptions.length);
-      } catch (error) {
-        console.error('❌ Error fetching instructor options:', error);
-      }
-      
-      try {
-        // Test 7: Get instructor statistics
-        instructorStats = await getInstructorStats();
-        console.log('✅ Instructor stats:', instructorStats);
-      } catch (error) {
-        console.error('❌ Error fetching instructor stats:', error);
-      }
-
-      // === GROUPS SERVICE TESTS ===
-      console.log('\n👥 TESTING GROUPS SERVICE:');
-      
-      let allGroups = [];
-      let activeGroups = [];
-      let groupOptions = [];
-      let groupStats = { total: 0, active: 0, inactive: 0, completed: 0, totalCapacity: 0, totalEnrollment: 0, averageEnrollment: 0 };
-      
-      try {
-        // Test 8: Fetch all groups
-        allGroups = await getGroups();
-        console.log('✅ All groups:', allGroups.length);
-      } catch (error) {
-        console.error('❌ Error fetching all groups:', error);
-      }
-      
-      try {
-        // Test 9: Fetch active groups
-        activeGroups = await getActiveGroups();
-        console.log('✅ Active groups:', activeGroups.length);
-      } catch (error) {
-        console.error('❌ Error fetching active groups:', error);
-      }
-      
-      try {
-        // Test 10: Fetch group options (for dropdowns)
-        groupOptions = await getGroupOptions();
-        console.log('✅ Group options:', groupOptions.length);
-      } catch (error) {
-        console.error('❌ Error fetching group options:', error);
-      }
-      
-      try {
-        // Test 11: Get group statistics
-        groupStats = await getGroupStats();
-        console.log('✅ Group stats:', groupStats);
-      } catch (error) {
-        console.error('❌ Error fetching group stats:', error);
-      }
-
-      // === STUDENTS SCHEDULING TESTS ===
-      console.log('\n🎓 TESTING STUDENTS SCHEDULING SERVICE:');
-      
-      let studentsForScheduling = [];
-      let theoryStudents = [];
-      let practicalStudents = [];
-      let studentStats = { total: 0, active: 0, onHold: 0, completed: 0, dropped: 0, averagePhase: 0, averageHours: 0 };
-      
-      try {
-        // Test 12: Fetch students for scheduling
-        studentsForScheduling = await getStudentsForScheduling();
-        console.log('✅ Students for scheduling:', studentsForScheduling.length);
-      } catch (error) {
-        console.error('❌ Error fetching students for scheduling:', error);
-      }
-      
-      try {
-        // Test 13: Fetch students available for theory classes
-        theoryStudents = await getAvailableStudentsForClass('theory');
-        console.log('✅ Students available for theory:', theoryStudents.length);
-      } catch (error) {
-        console.error('❌ Error fetching theory students:', error);
-      }
-      
-      try {
-        // Test 14: Fetch students available for practical classes
-        practicalStudents = await getAvailableStudentsForClass('practical');
-        console.log('✅ Students available for practical:', practicalStudents.length);
-      } catch (error) {
-        console.error('❌ Error fetching practical students:', error);
-      }
-      
-      try {
-        // Test 15: Get student statistics
-        studentStats = await getStudentStats();
-        console.log('✅ Student stats:', studentStats);
-      } catch (error) {
-        console.error('❌ Error fetching student stats:', error);
-      }
+      // Test statistics
+      const studentStats = await getStudentStats();
+      console.log('✅ Student stats:', studentStats);
       
       // === DIAGNOSTIC: Check student phases ===
       if (studentsForScheduling.length > 0) {
@@ -1070,742 +277,574 @@ const Calendar = () => {
         }
       }
       
-      // Test 16: Show sample data if available
-      if (allClasses.length > 0) {
-        console.log('📋 Sample class data:', allClasses[0]);
-      }
-      if (allInstructors.length > 0) {
-        console.log('👨‍🏫 Sample instructor data:', allInstructors[0]);
-      }
-      if (instructorOptions.length > 0) {
-        console.log('📝 Sample instructor option:', instructorOptions[0]);
-      }
-      if (allGroups.length > 0) {
-        console.log('👥 Sample group data:', allGroups[0]);
-      }
-      if (groupOptions.length > 0) {
-        console.log('📝 Sample group option:', groupOptions[0]);
-      }
-      if (studentsForScheduling.length > 0) {
-        console.log('🎓 Sample student for scheduling:', studentsForScheduling[0]);
-      }
-      
-      // Show results in UI
-      alert(`🧪 Service Test Results:
-
-📚 CLASSES SERVICE:
-📊 Total classes: ${allClasses.length}
-⏰ Upcoming classes: ${upcoming.length}  
-📅 May 2025 classes: ${mayClasses.length}
-
-👨‍🏫 INSTRUCTORS SERVICE:
-👥 Total instructors: ${allInstructors.length}
-✅ Active instructors: ${activeInstructors.length}
-📝 Instructor options: ${instructorOptions.length}
-📊 Stats: ${instructorStats.active} active, ${instructorStats.inactive} inactive, ${instructorStats.onLeave} on leave
-
-👥 GROUPS SERVICE:
-📚 Total groups: ${allGroups.length}
-✅ Active groups: ${activeGroups.length}
-📝 Group options: ${groupOptions.length}
-📊 Stats: ${groupStats.active} active, ${groupStats.inactive} inactive, ${groupStats.completed} completed
-📈 Capacity: ${groupStats.totalEnrollment}/${groupStats.totalCapacity}
-
-🎓 STUDENTS SCHEDULING SERVICE:
-📝 Students for scheduling: ${studentsForScheduling.length}
-📚 Available for theory: ${theoryStudents.length}
-🚗 Available for practical: ${practicalStudents.length}
-📊 Stats: ${studentStats.active} active, ${studentStats.onHold} on hold, ${studentStats.completed} completed
-📈 Avg Phase: ${studentStats.averagePhase}, Avg Hours: ${studentStats.averageHours}
-
-✅ All services are working perfectly! Check console for detailed logs.`);
-      
     } catch (error) {
       console.error('❌ Service test failed:', error);
-      alert(`❌ Test failed: ${error.message}\n\nCheck console for details.`);
     }
   };
-  
-  // Generate weekly view days (current week)
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
-  
-  // Time slots for weekly view (8:00 AM to 8:00 PM in 1-hour steps)
-  const timeSlots = Array.from({ length: 13 }, (_, i) => `${i + 8}:00`);
-  
-  // Parse time string to hour number
-  const parseTimeToHour = (timeString: string): number => {
-    const [hour] = timeString.split(':').map(Number);
-    return hour;
-  };
-  
-  // Calculate class position in weekly view
-  const getClassPositionData = (cls: ClassItem) => {
-    const startHour = parseTimeToHour(cls.startTime);
-    const endHour = parseTimeToHour(cls.endTime);
-    const duration = endHour - startHour;
-    
-    return {
-      startHour,
-      endHour,
-      duration
-    };
-  };
-  
-  // Handle class click
-  const handleClassClick = (cls: ClassItem) => {
-    setSelectedClass(cls);
-    setSheetOpen(true);
-  };
-  
-  // Render monthly view calendar
+
+  // Render month view
   const renderMonthView = () => (
-    <div className="mt-4">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">{format(currentMonth, 'MMMM yyyy')}</h2>
-        <div className="flex space-x-2">
-          <Button variant="outline" size="icon" onClick={prevMonth}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" onClick={nextMonth}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+    <div className="grid grid-cols-7 gap-1">
+      {/* Day headers */}
+      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+        <div key={day} className="p-2 text-center text-sm font-medium text-gray-500">
+          {day}
         </div>
-      </div>
+      ))}
       
-      <div className="grid grid-cols-7 gap-3 bg-background p-2">
-        {/* Days of week */}
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-          <div key={day} className="text-center py-3 font-medium text-muted-foreground bg-muted rounded-lg">
-            {day}
-          </div>
-        ))}
+      {/* Calendar days */}
+      {calendarDays.map(day => {
+        const dayClasses = getClassesForDay(day);
+        const isCurrentMonth = isSameMonth(day, currentMonth);
+        const isCurrentDay = isToday(day);
         
-        {/* Empty cells for days of previous month */}
-        {Array.from({ length: monthStart.getDay() }).map((_, index) => (
-          <div key={`empty-start-${index}`} className="bg-card/50 rounded-xl p-2.5 h-28 shadow-sm border border-border/50"></div>
-        ))}
-        
-        {/* Calendar days */}
-        {monthDays.map((day) => {
-          const dayClasses = getClassesForDay(day);
-          const displayClasses = dayClasses.slice(0, 1); // Only show first 1 class
-          const remainingCount = dayClasses.length - 1;  // Count remaining classes
-          const dayNum = day.getDay(); // 0 = Sunday, 3 = Wednesday
-          const isWednesday = dayNum === 3;
-          const isDay21 = day.getDate() === 21; // Check if it's the 21st day
-          
-          return (
-            <div
-              key={day.toString()}
-              className={`bg-card rounded-xl p-2.5 h-28 shadow-sm border border-border/50 hover:shadow-md transition-shadow ${
-                isDay21 ? 'bg-rose-50 border-rose-200' : ''
-              }`}
-            >
-              <div className="text-sm font-semibold mb-1 text-foreground">{format(day, 'd')}</div>
-              
-              <div className="space-y-1">
-              {displayClasses.map((cls) => (
-                <div
-                  key={cls.id}
-                    className={`${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"} px-2 py-1.5 text-xs rounded-md cursor-pointer hover:shadow-sm transition-all duration-200 hover:scale-[1.02] flex items-center`}
-                  onClick={() => handleClassClick(cls)}
-                >
-                    <div className="font-medium truncate">{cls.student}</div>
-                </div>
-              ))}
-              </div>
-              
-              {/* Show "+X more" message if there are additional classes */}
-              {remainingCount > 0 && (
-                <div className="text-xs font-medium text-muted-foreground mt-1 text-center bg-muted/50 py-0.5 px-2 rounded-md border border-border/30">
-                  +{remainingCount} more
-                </div>
-              )}
+        return (
+          <div
+            key={day.toISOString()}
+            className={cn(
+              "min-h-[100px] p-1 border border-gray-200 cursor-pointer hover:bg-gray-50",
+              !isCurrentMonth && "bg-gray-50 text-gray-400",
+              isCurrentDay && "bg-blue-50 border-blue-200"
+            )}
+            onClick={() => setSelectedDay(day)}
+          >
+            <div className={cn(
+              "text-sm font-medium mb-1",
+              isCurrentDay && "text-blue-600"
+            )}>
+              {format(day, 'd')}
             </div>
-          );
-        })}
-        
-        {/* Empty cells for days of next month */}
-        {Array.from({ length: (7 - ((monthDays.length + monthStart.getDay()) % 7)) % 7 }).map((_, index) => (
-          <div key={`empty-end-${index}`} className="bg-card/50 rounded-xl p-2.5 h-28 shadow-sm border border-border/50"></div>
-        ))}
-      </div>
-    </div>
-  );
-  
-  // Render weekly view calendar
-  const renderWeekView = () => (
-    <div className="mt-4">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Week of {format(weekDays[0], 'MMM d')} - {format(weekDays[6], 'MMM d, yyyy')}</h2>
-        <div className="flex space-x-2">
-          <Button variant="outline" size="icon" onClick={prevWeek}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" onClick={nextWeek}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-      
-      <div className="bg-background rounded-xl shadow-sm border border-border/50 p-3">
-        {/* Headers row */}
-        <div className="flex mb-3">
-          {/* Empty corner for time column */}
-          <div className="w-20 mr-3"></div>
-          {/* Day headers */}
-          <div className="flex-1 grid grid-cols-7 gap-3">
-            {weekDays.map((day, index) => (
-              <div 
-                key={day.toString()} 
-                className={`text-center py-3 font-medium text-muted-foreground rounded-lg ${
-                  isToday(day) ? 'bg-rose-50 border border-rose-200' : 'bg-muted'
-                }`}
+            
+            {/* Classes for this day */}
+            {dayClasses.slice(0, 2).map(cls => (
+              <div
+                key={cls.id}
+                className={cn(
+                  "text-xs p-1 mb-1 rounded cursor-pointer truncate",
+                  cls.type === "Theory" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedClass(cls);
+                  setSheetOpen(true);
+                }}
               >
-                <div className="text-sm font-medium text-muted-foreground">{format(day, 'EEE')}</div>
-                <div className="text-base font-semibold">{format(day, 'd')}</div>
+                {cls.startTime} - {cls.student}
               </div>
             ))}
-          </div>
-        </div>
-        
-        {/* Calendar grid */}
-        <div className="flex">
-          {/* Time column */}
-          <div className="w-20 mr-3 bg-muted rounded-lg">
-            {timeSlots.map((time, index) => (
-              <div 
-                key={time} 
-                className="h-10 flex items-center justify-center text-sm font-medium text-muted-foreground"
-              >
-                {time}
-              </div>
-            ))}
-          </div>
-          
-          {/* Day columns */}
-          <div className="flex-1 grid grid-cols-7 gap-3">
-            {weekDays.map((day, dayIndex) => {
-              const dayClasses = getClassesForDay(day);
-              
-              return (
-                <div 
-                  key={day.toString()} 
-                  className={`relative rounded-xl shadow-sm border ${
-                    isToday(day) 
-                      ? 'bg-rose-50 border-rose-200' 
-                      : 'bg-card border-border/50'
-                  }`}
-                >
-                  {/* Time slot grid */}
-                  {timeSlots.map((time, timeIndex) => (
-                    <div 
-                      key={`${day}-${time}`} 
-                      className="h-10 border-t border-border/20 first:border-t-0"
-                    />
-                  ))}
-                  
-                  {/* Class cards */}
-                  {dayClasses.map((cls) => {
-                    const { startHour } = getClassPositionData(cls);
-                    const slotIndex = startHour - 8; // 8 is first hour (8:00)
-                    const topPosition = slotIndex * 40; // 40px per slot (h-10)
-                    
-                    return (
-                      <div
-                        key={cls.id}
-                        className={`absolute left-1 right-1 ${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"} p-2 rounded-md cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.02] flex items-center h-8`}
-                        style={{ 
-                          top: `${topPosition + 4}px`, // 4px offset for centering in 40px slot
-                        }}
-                        onClick={() => handleClassClick(cls)}
-                      >
-                        <div className="font-medium text-xs truncate">{cls.student}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-  
-  // Render day view calendar
-  const renderDayView = () => {
-    const dayClasses = getClassesForDay(selectedDay);
-    const sortedClasses = dayClasses.sort((a, b) => a.startTime.localeCompare(b.startTime));
-    
-    // Get calendar month for the selected day
-    const calendarMonth = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), 1);
-    const calendarMonthStart = startOfMonth(calendarMonth);
-    const calendarMonthEnd = endOfMonth(calendarMonth);
-    const calendarMonthDays = eachDayOfInterval({ start: calendarMonthStart, end: calendarMonthEnd });
-    
-    return (
-      <div className="mt-4">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">{format(selectedDay, 'EEEE, MMMM d, yyyy')}</h2>
-          <div className="flex space-x-2">
-            <Button variant="outline" size="icon" onClick={prevDay}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" onClick={nextDay}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Classes List - Left side */}
-          <div className="lg:col-span-2 space-y-4">
-            {sortedClasses.length === 0 ? (
-              <div className="text-center py-12">
-                <CalendarIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium text-muted-foreground mb-2">No classes scheduled</h3>
-                <p className="text-sm text-muted-foreground">There are no classes scheduled for this day.</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {sortedClasses.map((cls) => (
-                  <Card 
-                    key={cls.id} 
-                    className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.01]"
-                    onClick={() => handleClassClick(cls)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-3">
-                            <Badge 
-                              variant={cls.type === "Theory" ? "default" : "secondary"}
-                              className={cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"}
-                            >
-                              {cls.type}
-                            </Badge>
-                            <span className="text-lg font-semibold">{cls.className}</span>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="flex items-center space-x-2">
-                              <UserRound className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm font-medium">{cls.student}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Users className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm text-muted-foreground">{cls.group}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Clock className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm text-muted-foreground">{cls.startTime} - {cls.endTime}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Phone className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm text-muted-foreground">{cls.phone}</span>
-                            </div>
-                          </div>
-                          
-                          {cls.notes && (
-                            <div className="mt-3 p-3 bg-muted/50 rounded-md">
-                              <div className="flex items-start space-x-2">
-                                <Bookmark className="h-4 w-4 text-muted-foreground mt-0.5" />
-                                <p className="text-sm text-muted-foreground">{cls.notes}</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-foreground">{cls.startTime}</div>
-                          <div className="text-sm text-muted-foreground">{cls.duration}</div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+            
+            {/* Show "+X more" if there are more classes */}
+            {dayClasses.length > 2 && (
+              <div className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                +{dayClasses.length - 2} more
               </div>
             )}
           </div>
-          
-          {/* Mini Calendar - Right side */}
-          <div className="lg:col-span-1">
-            <Card className="bg-background shadow-sm border border-border/50">
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-center">
-                  <CardTitle className="text-lg font-semibold">
-                    {format(calendarMonth, 'MMMM yyyy')}
-                  </CardTitle>
-                  <div className="flex space-x-1">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setSelectedDay(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, selectedDay.getDate()))}
+        );
+      })}
+    </div>
+  );
+
+  // Render week view
+  const renderWeekView = () => {
+    const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
+    
+    return (
+      <div className="grid grid-cols-8 gap-1">
+        {/* Time column header */}
+        <div className="p-2 text-center text-sm font-medium text-gray-500">Time</div>
+        
+        {/* Day headers */}
+        {weekDays.map(day => (
+          <div key={day.toISOString()} className="p-2 text-center text-sm font-medium text-gray-500">
+            <div>{format(day, 'EEE')}</div>
+            <div className={cn(
+              "text-lg",
+              isToday(day) && "text-blue-600 font-bold"
+            )}>
+              {format(day, 'd')}
+            </div>
+          </div>
+        ))}
+        
+        {/* Time slots */}
+        {Array.from({ length: 10 }, (_, i) => i + 8).map(hour => (
+          <React.Fragment key={hour}>
+            {/* Time label */}
+            <div className="p-2 text-sm text-gray-500 border-r">
+              {hour}:00
+            </div>
+            
+            {/* Day columns */}
+            {weekDays.map(day => {
+              const dayClasses = getClassesForDay(day).filter(cls => {
+                const classHour = parseInt(cls.startTime.split(':')[0]);
+                return classHour === hour;
+              });
+              
+              return (
+                <div key={`${day.toISOString()}-${hour}`} className="min-h-[60px] p-1 border border-gray-200">
+                  {dayClasses.map(cls => (
+                    <div
+                      key={cls.id}
+                      className={cn(
+                        "text-xs p-1 mb-1 rounded cursor-pointer",
+                        cls.type === "Theory" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
+                      )}
+                      onClick={() => {
+                        setSelectedClass(cls);
+                        setSheetOpen(true);
+                      }}
                     >
-                      <ChevronLeft className="h-3 w-3" />
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setSelectedDay(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, selectedDay.getDate()))}
-                    >
-                      <ChevronRight className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-3">
-                <div className="grid grid-cols-7 gap-1">
-                  {/* Days of week headers */}
-                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day) => (
-                    <div key={day} className="text-center py-2 text-xs font-medium text-muted-foreground">
-                      {day}
+                      <div className="font-medium">{cls.student}</div>
+                      <div>{cls.className}</div>
                     </div>
                   ))}
-                  
-                  {/* Empty cells for days of previous month */}
-                  {Array.from({ length: calendarMonthStart.getDay() }).map((_, index) => (
-                    <div key={`empty-start-${index}`} className="h-8"></div>
-                  ))}
-                  
-                  {/* Calendar days */}
-                  {calendarMonthDays.map((day) => {
-                    const dayClasses = getClassesForDay(day);
-                    const isSelected = format(day, 'yyyy-MM-dd') === format(selectedDay, 'yyyy-MM-dd');
-                    const hasClasses = dayClasses.length > 0;
-                    
-                    return (
-                      <button
-                        key={day.toString()}
-                        onClick={() => setSelectedDay(day)}
-                        className={`h-8 w-8 text-xs rounded-md border transition-all duration-200 hover:shadow-sm ${
-                          isSelected
-                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                            : isToday(day)
-                            ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
-                            : hasClasses
-                            ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'
-                            : 'bg-card border-border/50 hover:bg-muted/50'
-                        }`}
-                      >
-                        {format(day, 'd')}
-                      </button>
-                    );
-                  })}
-                  
-                  {/* Empty cells for days of next month */}
-                  {Array.from({ length: (7 - ((calendarMonthDays.length + calendarMonthStart.getDay()) % 7)) % 7 }).map((_, index) => (
-                    <div key={`empty-end-${index}`} className="h-8"></div>
-                  ))}
                 </div>
-                
-                {/* Legend */}
-                <div className="mt-4 space-y-2 text-xs">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-primary rounded-sm"></div>
-                    <span className="text-muted-foreground">Selected</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-rose-100 border border-rose-200 rounded-sm"></div>
-                    <span className="text-muted-foreground">Today</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-blue-100 border border-blue-200 rounded-sm"></div>
-                    <span className="text-muted-foreground">Has classes</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+              );
+            })}
+          </React.Fragment>
+        ))}
       </div>
     );
   };
-  
-  return (
-    <PageLayout>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Calendar</h1>
-        <div className="flex gap-2">
-          {/* 🧪 TEMPORARY TEST BUTTON - Remove this later */}
-          <Button variant="outline" onClick={testServices}>
-            🧪 Test Services
-          </Button>
-          <Button onClick={() => setModalOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" />
-            Create Class
-          </Button>
-        </div>
-      </div>
 
-      {/* Simple Add Class Dialog - Following Add Instructor pattern */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Add New Class</DialogTitle>
-            <DialogDescription>
-              Fill in the class details to schedule a new session.
-            </DialogDescription>
-          </DialogHeader>
+  // Render day view
+  const renderDayView = () => {
+    const dayClasses = getClassesForDay(selectedDay);
+    
+    return (
+      <div className="space-y-4">
+        <div className="text-center">
+          <h3 className="text-lg font-semibold">{format(selectedDay, 'EEEE, MMMM d, yyyy')}</h3>
+        </div>
+        
+        {dayClasses.length === 0 ? (
+          <div className="text-center text-gray-500 py-8">
+            No classes scheduled for this day
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {dayClasses.map(cls => (
+              <Card key={cls.id} className="cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => {
+                      setSelectedClass(cls);
+                      setSheetOpen(true);
+                    }}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className={cn(
+                        "w-3 h-3 rounded-full",
+                        cls.type === "Theory" ? "bg-blue-500" : "bg-green-500"
+                      )} />
+                      <div>
+                        <div className="font-medium">{cls.className}</div>
+                        <div className="text-sm text-gray-500">{cls.student}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium">{cls.startTime} - {cls.endTime}</div>
+                      <div className="text-sm text-gray-500">{cls.instructor}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <PageLayout title="Calendar">
+      <div className="space-y-6">
+        {/* Header with navigation and actions */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Button variant="outline" size="sm" onClick={prevMonth}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <h2 className="text-xl font-semibold">
+              {format(currentMonth, 'MMMM yyyy')}
+            </h2>
+            <Button variant="outline" size="sm" onClick={nextMonth}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
           
-          <div className="grid gap-6 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="class-type">Class Type</Label>
-                <Select 
-                  value={formData.type} 
-                  onValueChange={(value: "Theory" | "Practical") => handleFormChange('type', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select class type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Theory">Theory</SelectItem>
-                    <SelectItem value="Practical">Practical</SelectItem>
-                  </SelectContent>
-                </Select>
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" size="sm" onClick={testServices}>
+              🧪 Test Services
+            </Button>
+            <Button onClick={() => setModalOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Class
+            </Button>
+          </div>
+        </div>
+
+        {/* View mode toggle */}
+        <ToggleGroup type="single" value={viewMode} onValueChange={setViewMode}>
+          <ToggleGroupItem value="month">Month</ToggleGroupItem>
+          <ToggleGroupItem value="week">Week</ToggleGroupItem>
+          <ToggleGroupItem value="day">Day</ToggleGroupItem>
+        </ToggleGroup>
+
+        {/* Instructor tabs */}
+        <Tabs value={instructor} onValueChange={setInstructor}>
+          <TabsList>
+            <TabsTrigger value="Mike Brown">Mike Brown</TabsTrigger>
+            <TabsTrigger value="Lisa Taylor">Lisa Taylor</TabsTrigger>
+            <TabsTrigger value="James Wilson">James Wilson</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="Mike Brown" className="mt-6">
+            <Card>
+              <CardContent className="p-6">
+                {loading ? (
+                  <div className="text-center py-8">
+                    <div className="text-gray-500">Loading calendar data...</div>
+                  </div>
+                ) : (
+                  <>
+                    {viewMode === "month" && renderMonthView()}
+                    {viewMode === "week" && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Button variant="outline" size="sm" onClick={prevWeek}>
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <h3 className="font-semibold">
+                            {format(currentWeekStart, 'MMM d')} - {format(addDays(currentWeekStart, 6), 'MMM d, yyyy')}
+                          </h3>
+                          <Button variant="outline" size="sm" onClick={nextWeek}>
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {renderWeekView()}
+                      </div>
+                    )}
+                    {viewMode === "day" && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Button variant="outline" size="sm" onClick={prevDay}>
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <h3 className="font-semibold">
+                            {format(selectedDay, 'EEEE, MMMM d, yyyy')}
+                          </h3>
+                          <Button variant="outline" size="sm" onClick={nextDay}>
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {renderDayView()}
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="Lisa Taylor" className="mt-6">
+            <Card>
+              <CardContent className="p-6">
+                {loading ? (
+                  <div className="text-center py-8">
+                    <div className="text-gray-500">Loading calendar data...</div>
+                  </div>
+                ) : (
+                  <>
+                    {viewMode === "month" && renderMonthView()}
+                    {viewMode === "week" && renderWeekView()}
+                    {viewMode === "day" && renderDayView()}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="James Wilson" className="mt-6">
+            <Card>
+              <CardContent className="p-6">
+                {loading ? (
+                  <div className="text-center py-8">
+                    <div className="text-gray-500">Loading calendar data...</div>
+                  </div>
+                ) : (
+                  <>
+                    {viewMode === "month" && renderMonthView()}
+                    {viewMode === "week" && renderWeekView()}
+                    {viewMode === "day" && renderDayView()}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Class Details Sheet */}
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>Class Details</SheetTitle>
+              <SheetDescription>
+                View and manage class information
+              </SheetDescription>
+            </SheetHeader>
+            
+            {selectedClass && (
+              <div className="space-y-6 mt-6">
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <Badge variant={selectedClass.type === "Theory" ? "default" : "secondary"}>
+                      {selectedClass.type}
+                    </Badge>
+                    <span className="text-sm text-gray-500">{selectedClass.group}</span>
+                  </div>
+                  
+                  <div>
+                    <h3 className="font-semibold text-lg">{selectedClass.className}</h3>
+                    <p className="text-gray-600">{selectedClass.student}</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="flex items-center space-x-2">
+                      <CalendarIcon className="h-4 w-4 text-gray-400" />
+                      <span>{selectedClass.date}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-4 w-4 text-gray-400" />
+                      <span>{selectedClass.startTime} - {selectedClass.endTime}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <UserRound className="h-4 w-4 text-gray-400" />
+                      <span>{selectedClass.instructor}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Phone className="h-4 w-4 text-gray-400" />
+                      <span>{selectedClass.phone}</span>
+                    </div>
+                  </div>
+                  
+                  {selectedClass.notes && (
+                    <div>
+                      <h4 className="font-medium mb-2">Notes</h4>
+                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                        {selectedClass.notes}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex space-x-2">
+                  <Button variant="outline" className="flex-1">
+                    Edit Class
+                  </Button>
+                  <Button variant="destructive" className="flex-1">
+                    Cancel Class
+                  </Button>
+                </div>
               </div>
+            )}
+          </SheetContent>
+        </Sheet>
+
+        {/* Add Class Modal */}
+        <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Add New Class</DialogTitle>
+              <DialogDescription>
+                Schedule a new theory or practical class
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="type">Class Type *</Label>
+                  <Select value={formData.type} onValueChange={(value) => handleFormChange('type', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select class type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Theory">Theory Class</SelectItem>
+                      <SelectItem value="Practical">Practical Class</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="date">Date *</Label>
+                  <Input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => handleFormChange('date', e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="startTime">Start Time *</Label>
+                  <Input
+                    type="time"
+                    value={formData.startTime}
+                    onChange={(e) => handleFormChange('startTime', e.target.value)}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="duration">Duration *</Label>
+                  <Select 
+                    value={formData.duration.toString()} 
+                    onValueChange={(value) => handleFormChange('duration', parseInt(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {durationOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value.toString()}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>End Time</Label>
+                  <Input
+                    value={calculateEndTime(formData.startTime, formData.duration)}
+                    disabled
+                    className="bg-gray-50"
+                  />
+                </div>
+              </div>
+              
               <div className="space-y-2">
-                <Label htmlFor="instructor">Instructor</Label>
-                <Select 
-                  value={formData.instructor} 
-                  onValueChange={(value) => handleFormChange('instructor', value)}
-                >
+                <Label htmlFor="instructor">Instructor *</Label>
+                <Select value={formData.instructor} onValueChange={(value) => handleFormChange('instructor', value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select instructor" />
                   </SelectTrigger>
                   <SelectContent>
-                    {instructors.map((instructor) => (
-                      <SelectItem key={instructor} value={instructor}>
-                        {instructor}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="Mike Brown">Mike Brown</SelectItem>
+                    <SelectItem value="Lisa Taylor">Lisa Taylor</SelectItem>
+                    <SelectItem value="James Wilson">James Wilson</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => handleFormChange('date', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="time">Start Time</Label>
-                <Input
-                  id="time"
-                  type="time"
-                  value={formData.startTime}
-                  onChange={(e) => handleFormChange('startTime', e.target.value)}
-                />
-              </div>
-            </div>
-            
-            {/* Conditional Student Selection based on Class Type */}
-            {formData.type && (
-              <div className="space-y-2">
-                {formData.type === "Theory" ? (
-                  // Theory: Show Group Dropdown
-                  <>
-                    <Label htmlFor="group">Select Group</Label>
-                    <Select 
-                      value={formData.selectedGroup} 
-                      onValueChange={(value) => handleFormChange('selectedGroup', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a group for theory class" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {dummyGroups.map((group) => (
-                          <SelectItem key={group.id} value={group.id}>
-                            {group.name} ({group.studentCount} students)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </>
-                ) : (
-                  // Practical: Show Single Student Dropdown with Search
-                  <>
-                    <Label htmlFor="student">Select Student</Label>
-                    <Popover open={studentComboboxOpen} onOpenChange={setStudentComboboxOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={studentComboboxOpen}
-                          className="w-full justify-between"
-                        >
-                          {formData.selectedStudents[0] 
-                            ? dummyStudents.find(student => student.name === formData.selectedStudents[0])?.name + 
-                              ` (${dummyStudents.find(student => student.name === formData.selectedStudents[0])?.id})`
-                            : "Select a student for practical class..."
-                          }
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[400px] p-0">
-                        <Command>
-                          <CommandInput placeholder="Search students..." />
-                          <CommandList>
-                            <CommandEmpty>No student found.</CommandEmpty>
-                            <CommandGroup>
-                              {dummyStudents.map((student) => (
-                                <CommandItem
-                                  key={student.id}
-                                  value={student.name}
-                                  onSelect={(currentValue) => {
-                                    const newValue = currentValue === formData.selectedStudents[0] ? [] : [currentValue];
-                                    handleFormChange('selectedStudents', newValue);
-                                    setStudentComboboxOpen(false);
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      formData.selectedStudents[0] === student.name ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  {student.name} ({student.id})
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </>
-                )}
-              </div>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Input
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => handleFormChange('notes', e.target.value)}
-                placeholder="Class notes or description"
-              />
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit}>
-              Create Class
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      <Card>
-        <CardContent className="p-6">
-          <div className="space-y-4">
-            {/* Instructor Tabs with View Toggle */}
-            <Tabs defaultValue="Mike Brown" onValueChange={setInstructor}>
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
-                <TabsList>
-                  <TabsTrigger value="Mike Brown">Mike Brown</TabsTrigger>
-                  <TabsTrigger value="Lisa Taylor">Lisa Taylor</TabsTrigger>
-                  <TabsTrigger value="James Wilson">James Wilson</TabsTrigger>
-                </TabsList>
-                
-                {/* View Mode Toggle */}
-                <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value)}>
-                  <ToggleGroupItem value="month" aria-label="Month view">Month</ToggleGroupItem>
-                  <ToggleGroupItem value="week" aria-label="Week view">Week</ToggleGroupItem>
-                  <ToggleGroupItem value="day" aria-label="Day view">Day</ToggleGroupItem>
-                </ToggleGroup>
-              </div>
               
-              {/* Calendar View */}
-              {viewMode === "month" ? renderMonthView() : 
-               viewMode === "week" ? renderWeekView() : 
-               renderDayView()}
-            </Tabs>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Class Details Sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="sm:max-w-md">
-          {selectedClass && (
-            <>
-              <SheetHeader>
-                <SheetTitle>{selectedClass.className}</SheetTitle>
-                <SheetDescription>{selectedClass.type} Session</SheetDescription>
-              </SheetHeader>
-              <div className="mt-6 space-y-4">
-                <div className="flex items-start space-x-3">
-                  <UserRound className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Student</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.student}</p>
-                  </div>
+              {/* Conflict warning */}
+              {checkInstructorConflict() && (
+                <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded">
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                  <span className="text-sm text-red-700">
+                    Instructor {formData.instructor} is already booked at {formData.startTime} on {formData.date}
+                  </span>
                 </div>
-                <div className="flex items-start space-x-3">
-                  <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Group</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.group}</p>
-                  </div>
+              )}
+              
+              {/* Theory class group selection */}
+              {formData.type === "Theory" && (
+                <div className="space-y-2">
+                  <Label htmlFor="group">Group *</Label>
+                  <Select value={formData.selectedGroup} onValueChange={(value) => handleFormChange('selectedGroup', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select group for theory class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {groups.map((group) => (
+                        <SelectItem key={group.id} value={group.id}>
+                          {group.name} ({group.currentEnrollment} students)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="flex items-start space-x-3">
-                  <UserRound className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Instructor</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.instructor}</p>
-                  </div>
+              )}
+              
+              {/* Practical class student selection */}
+              {formData.type === "Practical" && (
+                <div className="space-y-2">
+                  <Label>Student *</Label>
+                  <Popover open={studentComboboxOpen} onOpenChange={setStudentComboboxOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={studentComboboxOpen}
+                        className="w-full justify-between"
+                      >
+                        {formData.selectedStudents[0] 
+                          ? students.find(student => student.name === formData.selectedStudents[0])?.name + 
+                            ` (${students.find(student => student.name === formData.selectedStudents[0])?.studentId})`
+                          : "Select a student for practical class..."
+                        }
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput placeholder="Search students..." />
+                        <CommandList>
+                          <CommandEmpty>No student found.</CommandEmpty>
+                          <CommandGroup>
+                            {students.map((student) => (
+                              <CommandItem
+                                key={student.id}
+                                value={student.name}
+                                onSelect={(currentValue) => {
+                                  const newValue = currentValue === formData.selectedStudents[0] ? [] : [currentValue];
+                                  handleFormChange('selectedStudents', newValue);
+                                  setStudentComboboxOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    formData.selectedStudents.includes(student.name) ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {student.name} ({student.studentId})
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
-                <div className="flex items-start space-x-3">
-                  <CalendarIcon className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Date & Time</p>
-                    <p className="text-sm text-muted-foreground">
-                      {format(new Date(selectedClass.date), 'MMMM d, yyyy')} • {selectedClass.startTime} - {selectedClass.endTime}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Duration</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.duration}</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Contact</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.phone}</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <Bookmark className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Notes</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.notes}</p>
-                  </div>
-                </div>
+              )}
+              
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  placeholder="Add any additional notes or instructions for this class..."
+                  value={formData.notes}
+                  onChange={(e) => handleFormChange('notes', e.target.value)}
+                />
               </div>
-              <div className="mt-6">
-                <SheetClose asChild>
-                  <Button className="w-full">Close</Button>
-                </SheetClose>
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
+            </div>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSubmit}>
+                Create Class
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </PageLayout>
   );
 };
 
-export default Calendar; 
+export default Calendar;
