@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { PageLayout } from "@/components/ui/page-layout";
 import { Button } from "@/components/ui/button";
-import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, Bookmark, UserRound, Calendar as CalendarIcon, AlertTriangle, Check, ChevronsUpDown } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, Bookmark, UserRound, Calendar as CalendarIcon, AlertTriangle, Check, ChevronsUpDown, Loader2, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -21,24 +21,15 @@ import { getClasses, createClass, getUpcomingClasses, getClassById, updateClass,
 import { getInstructors, getActiveInstructors, getInstructorOptions, getInstructorStats } from "@/services/instructors";
 import { getGroups, getActiveGroups, getGroupOptions, getGroupStats } from "@/services/groups";
 import { getStudentsForScheduling, getStudentsByGroup, getAvailableStudentsForClass, getStudentStats } from "@/services/students";
+import { useToast } from "@/hooks/use-toast";
 
-// Define class type
-interface ClassItem {
-  id: number;
-  student: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  phone: string;
-  instructor: string;
-  className: string;
-  type: string;
-  group: string;
-  duration: string;
-  notes: string;
-}
+// Import types from services
+import type { ClassItem } from "@/services/classes";
+import type { Instructor, InstructorOption } from "@/services/instructors";
+import type { Group, GroupOption } from "@/services/groups";
+import type { StudentOption } from "@/services/students";
 
-// Define form data interface
+// Define form data interface (matches service layer)
 interface ClassFormData {
   type: "Theory" | "Practical" | "";
   date: string;
@@ -50,31 +41,8 @@ interface ClassFormData {
   notes: string;
 }
 
-// Dummy data for students
-const dummyStudents = [
-  { id: 1, name: "Emma Wilson", group: "Group A", phone: "(555) 123-4567" },
-  { id: 2, name: "John Smith", group: "Group B", phone: "(555) 234-5678" },
-  { id: 3, name: "Sophia Garcia", group: "Group C", phone: "(555) 345-6789" },
-  { id: 4, name: "Michael Johnson", group: "Group A", phone: "(555) 456-7890" },
-  { id: 5, name: "Olivia Brown", group: "Group B", phone: "(555) 567-8901" },
-  { id: 6, name: "David Lee", group: "Group C", phone: "(555) 678-9012" },
-  { id: 7, name: "Ava Martinez", group: "Group A", phone: "(555) 789-0123" },
-  { id: 8, name: "James Wilson", group: "Group B", phone: "(555) 890-1234" },
-  { id: 9, name: "Tyler Rodriguez", group: "Group A", phone: "(555) 234-5678" },
-  { id: 10, name: "Isabella Lopez", group: "Group B", phone: "(555) 345-6789" },
-  { id: 11, name: "Mason Clark", group: "Group C", phone: "(555) 456-7890" },
-  { id: 12, name: "Abigail Turner", group: "Group A", phone: "(555) 567-8901" },
-];
-
-// Dummy data for groups
-const dummyGroups = [
-  { id: "Group A", name: "Group A", studentCount: 4 },
-  { id: "Group B", name: "Group B", studentCount: 4 },
-  { id: "Group C", name: "Group C", studentCount: 4 },
-];
-
-// Instructors list
-const instructors = ["Mike Brown", "Lisa Taylor", "James Wilson"];
+// Real data state - will be loaded from database
+// (Keeping empty arrays as initial state)
 
 // Duration options
 const durationOptions = [
@@ -83,693 +51,34 @@ const durationOptions = [
   { value: 120, label: "120 minutes" },
 ];
 
-// Expanded dummy data for calendar events
-const dummyClasses: ClassItem[] = [
-  // May 2025 classes
-  { 
-    id: 101, 
-    student: "Emma Wilson", 
-    date: "2025-05-05", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 123-4567", 
-    instructor: "Mike Brown",
-    className: "Basic Maneuvers",
-    type: "Practical",
-    group: "Group A",
-    duration: "1 hour",
-    notes: "Focus on parking techniques and three-point turns. Student needs extra practice with parallel parking."
-  },
-  { 
-    id: 102, 
-    student: "John Smith", 
-    date: "2025-05-05", 
-    startTime: "14:00", 
-    endTime: "15:00", 
-    phone: "(555) 234-5678", 
-    instructor: "Mike Brown",
-    className: "Highway Driving",
-    type: "Practical",
-    group: "Group B",
-    duration: "1 hour",
-    notes: "First highway session. Cover merging, lane changes, and maintaining safe distances."
-  },
-  // Additional class for May 5th to test "+X more" functionality
-  { 
-    id: 115, 
-    student: "Thomas Johnson", 
-    date: "2025-05-05", 
-    startTime: "16:00", 
-    endTime: "17:00", 
-    phone: "(555) 111-2222", 
-    instructor: "Mike Brown",
-    className: "Parking Practice",
-    type: "Practical",
-    group: "Group A",
-    duration: "1 hour",
-    notes: "Focused session on parallel parking and reverse parking techniques."
-  },
-  // Another class for May 5th
-  { 
-    id: 116, 
-    student: "Sarah Miller", 
-    date: "2025-05-05", 
-    startTime: "18:00", 
-    endTime: "19:00", 
-    phone: "(555) 333-4444", 
-    instructor: "Mike Brown",
-    className: "City Driving",
-    type: "Practical",
-    group: "Group B",
-    duration: "1 hour",
-    notes: "Practice navigating through busy city streets and handling traffic lights."
-  },
-  { 
-    id: 103, 
-    student: "Sophia Garcia", 
-    date: "2025-05-07", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 345-6789", 
-    instructor: "Lisa Taylor",
-    className: "Road Signs",
-    type: "Theory",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Review all regulatory, warning, and guide signs. Will include a mini-quiz at the end."
-  },
-  { 
-    id: 104, 
-    student: "Michael Johnson", 
-    date: "2025-05-08", 
-    startTime: "13:00", 
-    endTime: "14:00", 
-    phone: "(555) 456-7890", 
-    instructor: "James Wilson",
-    className: "Night Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "1 hour",
-    notes: "Preparation for driving in low-light conditions. Emphasis on proper use of headlights and visibility awareness."
-  },
-  { 
-    id: 105, 
-    student: "Olivia Brown", 
-    date: "2025-05-12", 
-    startTime: "11:00", 
-    endTime: "13:00", 
-    phone: "(555) 567-8901", 
-    instructor: "Lisa Taylor",
-    className: "Traffic Rules",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Comprehensive review of right-of-way rules, traffic signals, and special traffic situations."
-  },
-  { 
-    id: 106, 
-    student: "David Lee", 
-    date: "2025-05-14", 
-    startTime: "15:00", 
-    endTime: "16:00", 
-    phone: "(555) 678-9012", 
-    instructor: "James Wilson",
-    className: "Urban Driving",
-    type: "Practical",
-    group: "Group C",
-    duration: "1 hour",
-    notes: "City center navigation focusing on one-way streets, traffic circles, and busy intersections."
-  },
-  { 
-    id: 107, 
-    student: "Ava Martinez", 
-    date: "2025-05-15", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 789-0123", 
-    instructor: "Mike Brown",
-    className: "Defensive Driving",
-    type: "Theory",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Techniques for anticipating hazards and driving defensively. Will include video examples of common scenarios."
-  },
-  { 
-    id: 108, 
-    student: "James Wilson", 
-    date: "2025-05-19", 
-    startTime: "14:00", 
-    endTime: "15:00", 
-    phone: "(555) 890-1234", 
-    instructor: "Lisa Taylor",
-    className: "Final Assessment",
-    type: "Practical",
-    group: "Group B",
-    duration: "1 hour",
-    notes: "Pre-exam evaluation to identify any remaining areas for improvement before the official test."
-  },
-  { 
-    id: 109, 
-    student: "Tyler Rodriguez", 
-    date: "2025-05-21", 
-    startTime: "09:00", 
-    endTime: "10:00", 
-    phone: "(555) 234-5678", 
-    instructor: "Mike Brown",
-    className: "Intro to Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "1 hour",
-    notes: "First driving lesson. Familiarization with vehicle controls and basic operations."
-  },
-  { 
-    id: 110, 
-    student: "Isabella Lopez", 
-    date: "2025-05-21", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 345-6789", 
-    instructor: "Mike Brown",
-    className: "Driving Laws",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Overview of state driving laws and regulations."
-  },
-  { 
-    id: 111, 
-    student: "Mason Clark", 
-    date: "2025-05-22", 
-    startTime: "10:00", 
-    endTime: "11:00", 
-    phone: "(555) 456-7890", 
-    instructor: "Mike Brown",
-    className: "Parking Skills",
-    type: "Practical",
-    group: "Group C",
-    duration: "1 hour",
-    notes: "Focus on parallel parking, reverse parking, and angle parking techniques."
-  },
-  { 
-    id: 112, 
-    student: "Abigail Turner", 
-    date: "2025-05-26", 
-    startTime: "09:00", 
-    endTime: "10:00", 
-    phone: "(555) 567-8901", 
-    instructor: "Mike Brown",
-    className: "Lane Changes",
-    type: "Practical",
-    group: "Group A",
-    duration: "1 hour",
-    notes: "Practicing safe lane changes, mirror checks, and blind spot awareness."
-  },
-  { 
-    id: 113, 
-    student: "Ethan Adams", 
-    date: "2025-05-28", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 678-9012", 
-    instructor: "Mike Brown",
-    className: "Road Safety",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Discussion on road safety principles and accident prevention strategies."
-  },
-  { 
-    id: 114, 
-    student: "Mia Scott", 
-    date: "2025-05-30", 
-    startTime: "09:00", 
-    endTime: "10:00", 
-    phone: "(555) 789-0123", 
-    instructor: "Mike Brown",
-    className: "Highway Entry & Exit",
-    type: "Practical",
-    group: "Group C",
-    duration: "1 hour",
-    notes: "Practice entering and exiting highways safely using acceleration and deceleration lanes."
-  },
-  // Original July 2024 classes
-  { 
-    id: 1, 
-    student: "Emma Wilson", 
-    date: "2024-07-15", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 123-4567", 
-    instructor: "Mike Brown",
-    className: "Basic Maneuvers",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Focus on parking techniques and three-point turns. Student needs extra practice with parallel parking."
-  },
-  { 
-    id: 2, 
-    student: "John Smith", 
-    date: "2024-07-15", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 234-5678", 
-    instructor: "Mike Brown",
-    className: "Highway Driving",
-    type: "Practical",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "First highway session. Cover merging, lane changes, and maintaining safe distances."
-  },
-  { 
-    id: 3, 
-    student: "Sophia Garcia", 
-    date: "2024-07-16", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 345-6789", 
-    instructor: "Lisa Taylor",
-    className: "Road Signs",
-    type: "Theory",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Review all regulatory, warning, and guide signs. Will include a mini-quiz at the end."
-  },
-  { 
-    id: 4, 
-    student: "Michael Johnson", 
-    date: "2024-07-17", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 456-7890", 
-    instructor: "James Wilson",
-    className: "Night Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Preparation for driving in low-light conditions. Emphasis on proper use of headlights and visibility awareness."
-  },
-  { 
-    id: 5, 
-    student: "Olivia Brown", 
-    date: "2024-07-18", 
-    startTime: "11:00", 
-    endTime: "13:00", 
-    phone: "(555) 567-8901", 
-    instructor: "Lisa Taylor",
-    className: "Traffic Rules",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Comprehensive review of right-of-way rules, traffic signals, and special traffic situations."
-  },
-  { 
-    id: 6, 
-    student: "David Lee", 
-    date: "2024-07-19", 
-    startTime: "15:00", 
-    endTime: "17:00", 
-    phone: "(555) 678-9012", 
-    instructor: "James Wilson",
-    className: "Urban Driving",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "City center navigation focusing on one-way streets, traffic circles, and busy intersections."
-  },
-  { 
-    id: 7, 
-    student: "Ava Martinez", 
-    date: "2024-07-22", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 789-0123", 
-    instructor: "Mike Brown",
-    className: "Defensive Driving",
-    type: "Theory",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Techniques for anticipating hazards and driving defensively. Will include video examples of common scenarios."
-  },
-  { 
-    id: 8, 
-    student: "James Wilson", 
-    date: "2024-07-23", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 890-1234", 
-    instructor: "Lisa Taylor",
-    className: "Final Assessment",
-    type: "Practical",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Pre-exam evaluation to identify any remaining areas for improvement before the official test."
-  },
-  // Additional classes
-  { 
-    id: 9, 
-    student: "Tyler Rodriguez", 
-    date: "2024-07-02", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 234-5678", 
-    instructor: "Mike Brown",
-    className: "Intro to Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "First driving lesson. Familiarization with vehicle controls and basic operations."
-  },
-  { 
-    id: 10, 
-    student: "Isabella Lopez", 
-    date: "2024-07-02", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 345-6789", 
-    instructor: "Lisa Taylor",
-    className: "Driving Laws",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Overview of state driving laws and regulations."
-  },
-  { 
-    id: 11, 
-    student: "Mason Clark", 
-    date: "2024-07-03", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 456-7890", 
-    instructor: "James Wilson",
-    className: "Parking Skills",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Focus on parallel parking, reverse parking, and angle parking techniques."
-  },
-  { 
-    id: 12, 
-    student: "Abigail Turner", 
-    date: "2024-07-04", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 567-8901", 
-    instructor: "Mike Brown",
-    className: "Lane Changes",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Practicing safe lane changes, mirror checks, and blind spot awareness."
-  },
-  { 
-    id: 13, 
-    student: "Ethan Adams", 
-    date: "2024-07-05", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 678-9012", 
-    instructor: "Lisa Taylor",
-    className: "Road Safety",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Discussion on road safety principles and accident prevention strategies."
-  },
-  { 
-    id: 14, 
-    student: "Mia Scott", 
-    date: "2024-07-08", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 789-0123", 
-    instructor: "James Wilson",
-    className: "Highway Entry & Exit",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Practice entering and exiting highways safely using acceleration and deceleration lanes."
-  },
-  { 
-    id: 15, 
-    student: "Noah Green", 
-    date: "2024-07-09", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 890-1234", 
-    instructor: "Mike Brown",
-    className: "Emergency Maneuvers",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Learning how to handle emergency situations, including sudden stops and obstacle avoidance."
-  },
-  { 
-    id: 16, 
-    student: "Charlotte King", 
-    date: "2024-07-10", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 901-2345", 
-    instructor: "Lisa Taylor",
-    className: "Weather Conditions",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Understanding how to adjust driving techniques for different weather conditions."
-  },
-  { 
-    id: 17, 
-    student: "Lucas Wright", 
-    date: "2024-07-11", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 012-3456", 
-    instructor: "James Wilson",
-    className: "City Navigation",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Navigating through busy city streets and handling complex intersections."
-  },
-  { 
-    id: 18, 
-    student: "Amelia Cooper", 
-    date: "2024-07-12", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 123-4567", 
-    instructor: "Mike Brown",
-    className: "Vehicle Maintenance",
-    type: "Theory",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Basic vehicle maintenance and pre-drive inspection procedures."
-  },
-  { 
-    id: 19, 
-    student: "Henry Reed", 
-    date: "2024-07-12", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 234-5678", 
-    instructor: "Lisa Taylor",
-    className: "Fuel Efficiency",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Techniques for fuel-efficient driving and reducing carbon footprint."
-  },
-  { 
-    id: 20, 
-    student: "Ella Baker", 
-    date: "2024-07-15", 
-    startTime: "13:00", 
-    endTime: "14:30", 
-    phone: "(555) 345-6789", 
-    instructor: "James Wilson",
-    className: "Parking Practice",
-    type: "Practical",
-    group: "Group C",
-    duration: "1.5 hours",
-    notes: "Additional practice on various parking techniques in different scenarios."
-  },
-  { 
-    id: 21, 
-    student: "Alexander Cook", 
-    date: "2024-07-16", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 456-7890", 
-    instructor: "Mike Brown",
-    className: "Residential Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Navigating residential areas with focus on school zones and pedestrian awareness."
-  },
-  { 
-    id: 22, 
-    student: "Scarlett Morgan", 
-    date: "2024-07-17", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 567-8901", 
-    instructor: "Lisa Taylor",
-    className: "Night Driving Theory",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Theoretical aspects of night driving before practical application."
-  },
-  { 
-    id: 23, 
-    student: "Jack Murphy", 
-    date: "2024-07-18", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 678-9012", 
-    instructor: "James Wilson",
-    className: "Defensive Techniques",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Practical application of defensive driving techniques in real-world scenarios."
-  },
-  { 
-    id: 24, 
-    student: "Sofia Peterson", 
-    date: "2024-07-19", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 789-0123", 
-    instructor: "Mike Brown",
-    className: "Highway Merging",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Advanced highway merging techniques with heavy traffic simulation."
-  },
-  { 
-    id: 25, 
-    student: "Leo Phillips", 
-    date: "2024-07-19", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 890-1234", 
-    instructor: "Lisa Taylor",
-    className: "Traffic Law Updates",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Recent updates to traffic laws and regulations."
-  },
-  { 
-    id: 26, 
-    student: "Riley Campbell", 
-    date: "2024-07-22", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 901-2345", 
-    instructor: "James Wilson",
-    className: "Rural Driving",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Driving on rural roads, handling gravel surfaces, and wildlife awareness."
-  },
-  { 
-    id: 27, 
-    student: "Elijah Hayes", 
-    date: "2024-07-23", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 012-3456", 
-    instructor: "Mike Brown",
-    className: "Motorway Driving",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Advanced motorway driving techniques and high-speed safety."
-  },
-  { 
-    id: 28, 
-    student: "Avery Ross", 
-    date: "2024-07-24", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 123-4567", 
-    instructor: "Lisa Taylor",
-    className: "Pre-Test Review",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Comprehensive review of all theoretical topics before the final exam."
-  },
-  { 
-    id: 29, 
-    student: "Benjamin Long", 
-    date: "2024-07-25", 
-    startTime: "10:00", 
-    endTime: "12:00", 
-    phone: "(555) 234-5678", 
-    instructor: "James Wilson",
-    className: "Final Route Practice",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Practice driving on potential test routes for the final examination."
-  },
-  { 
-    id: 30, 
-    student: "Luna Carter", 
-    date: "2024-07-26", 
-    startTime: "14:00", 
-    endTime: "16:00", 
-    phone: "(555) 345-6789", 
-    instructor: "Mike Brown",
-    className: "Mock Test",
-    type: "Practical",
-    group: "Group A",
-    duration: "2 hours",
-    notes: "Full mock driving test under examination conditions."
-  },
-  { 
-    id: 31, 
-    student: "Gabriel Rivera", 
-    date: "2024-07-29", 
-    startTime: "09:00", 
-    endTime: "11:00", 
-    phone: "(555) 456-7890", 
-    instructor: "Lisa Taylor",
-    className: "Test Debrief",
-    type: "Theory",
-    group: "Group B",
-    duration: "2 hours",
-    notes: "Discussion of common test mistakes and final tips for success."
-  },
-  { 
-    id: 32, 
-    student: "Stella Ward", 
-    date: "2024-07-30", 
-    startTime: "13:00", 
-    endTime: "15:00", 
-    phone: "(555) 567-8901", 
-    instructor: "James Wilson",
-    className: "Confidence Building",
-    type: "Practical",
-    group: "Group C",
-    duration: "2 hours",
-    notes: "Building confidence for nervous students before their final test."
-  }
-];
+// Real data will be loaded from database
 
 const Calendar = () => {
-  // Set default date to May 2025
+  const { toast } = useToast();
+  
+  // Date and view state
   const [currentMonth, setCurrentMonth] = useState(new Date(2025, 4, 1)); // Month is 0-indexed, so 4 = May
   const [selectedDay, setSelectedDay] = useState(new Date(2025, 4, 21)); // May 21, 2025 for day view
-  const [instructor, setInstructor] = useState("Mike Brown");
   const [viewMode, setViewMode] = useState("month");
+  
+  // Data state - Replace mock data arrays with real state management
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [instructors, setInstructors] = useState<Instructor[]>([]);
+  const [instructorOptions, setInstructorOptions] = useState<InstructorOption[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
+  const [students, setStudents] = useState<StudentOption[]>([]);
+  
+  // Loading states
+  const [loading, setLoading] = useState(true);
+  const [instructorsLoading, setInstructorsLoading] = useState(true);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [studentsLoading, setStudentsLoading] = useState(true);
+  
+  // Selected instructor for filtering
+  const [selectedInstructorId, setSelectedInstructorId] = useState<string>("");
+  
+  // UI state
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   
@@ -787,16 +96,218 @@ const Calendar = () => {
     notes: "",
   });
   
+  // ============================================================================
+  // DATA FETCHING - Load real data from services
+  // ============================================================================
+
+  // Load instructors data
+  useEffect(() => {
+    const loadInstructors = async () => {
+      try {
+        setInstructorsLoading(true);
+        console.log('📚 Loading instructors for calendar...');
+        
+        // Load both full instructors and instructor options in parallel
+        const [allInstructors, instructorOpts] = await Promise.all([
+          getInstructors(),
+          getInstructorOptions()
+        ]);
+        
+        setInstructors(allInstructors);
+        setInstructorOptions(instructorOpts);
+        
+        // Set default instructor to first instructor (required since we removed "All Instructors")
+        if (!selectedInstructorId && allInstructors.length > 0) {
+          setSelectedInstructorId(allInstructors[0].id);
+        }
+        
+        console.log(`✅ Loaded ${allInstructors.length} instructors, ${instructorOpts.length} options`);
+      } catch (error) {
+        console.error('❌ Failed to load instructors:', error);
+        toast({
+          title: "Error Loading Instructors",
+          description: "Failed to load instructor data. Please refresh the page.",
+          variant: "destructive",
+        });
+      } finally {
+        setInstructorsLoading(false);
+      }
+    };
+
+    loadInstructors();
+  }, []); // Run once on component mount
+
+  // Load groups data
+  useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        setGroupsLoading(true);
+        console.log('👥 Loading groups for calendar...');
+        
+        // Load both full groups and group options in parallel
+        const [allGroups, groupOpts] = await Promise.all([
+          getGroups(),
+          getGroupOptions()
+        ]);
+        
+        setGroups(allGroups);
+        setGroupOptions(groupOpts);
+        
+        console.log(`✅ Loaded ${allGroups.length} groups, ${groupOpts.length} options`);
+      } catch (error) {
+        console.error('❌ Failed to load groups:', error);
+        toast({
+          title: "Error Loading Groups",
+          description: "Failed to load group data. Please refresh the page.",
+          variant: "destructive",
+        });
+      } finally {
+        setGroupsLoading(false);
+      }
+    };
+
+    loadGroups();
+  }, []); // Run once on component mount
+
+  // Load students data
+  useEffect(() => {
+    const loadStudents = async () => {
+      try {
+        setStudentsLoading(true);
+        console.log('🎓 Loading students for calendar...');
+        
+        const studentsData = await getStudentsForScheduling();
+        setStudents(studentsData);
+        
+        console.log(`✅ Loaded ${studentsData.length} students for scheduling`);
+      } catch (error) {
+        console.error('❌ Failed to load students:', error);
+        toast({
+          title: "Error Loading Students",
+          description: "Failed to load student data. Please refresh the page.",
+          variant: "destructive",
+        });
+      } finally {
+        setStudentsLoading(false);
+      }
+    };
+
+    loadStudents();
+  }, []); // Run once on component mount
+
+  // Load classes data - depends on current month and selected instructor
+  useEffect(() => {
+    const loadClasses = async () => {
+      try {
+        setLoading(true);
+        console.log('📅 Loading classes for calendar...', {
+          month: format(currentMonth, 'yyyy-MM'),
+          instructor: selectedInstructorId || 'all'
+        });
+        
+        // Calculate date range for current month
+        const startDate = format(startOfMonth(currentMonth), 'yyyy-MM-dd');
+        const endDate = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
+        
+        // Load classes with filters
+        // Always filter by instructor (no "All Instructors" option)
+        if (!selectedInstructorId) {
+          console.log('⚠️ No instructor selected, skipping class load');
+          return;
+        }
+
+        const classesData = await getClasses({
+          startDate,
+          endDate,
+          instructorId: selectedInstructorId
+        });
+        
+        setClasses(classesData);
+        
+        console.log(`✅ Loaded ${classesData.length} classes for ${format(currentMonth, 'MMMM yyyy')}`);
+      } catch (error) {
+        console.error('❌ Failed to load classes:', error);
+        toast({
+          title: "Error Loading Classes",
+          description: "Failed to load class data. Please refresh the page.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Only load classes if we have instructors loaded (to avoid loading twice)
+    if (!instructorsLoading) {
+      loadClasses();
+    }
+  }, [currentMonth, selectedInstructorId, instructorsLoading]); // Reload when month or instructor changes
+
+  // Refresh function that can be called after create/update/delete
+  const refreshClasses = async () => {
+    try {
+      console.log('🔄 Refreshing classes...');
+      
+      const startDate = format(startOfMonth(currentMonth), 'yyyy-MM-dd');
+      const endDate = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
+      
+      // Always filter by instructor (no "All Instructors" option)
+      if (!selectedInstructorId) {
+        console.log('⚠️ No instructor selected, skipping refresh');
+        return;
+      }
+
+      const classesData = await getClasses({
+        startDate,
+        endDate,
+        instructorId: selectedInstructorId
+      });
+      
+      setClasses(classesData);
+      console.log(`✅ Refreshed ${classesData.length} classes`);
+    } catch (error) {
+      console.error('❌ Failed to refresh classes:', error);
+      toast({
+        title: "Error Refreshing Classes",
+        description: "Failed to refresh class data.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // ============================================================================
+  // CALENDAR CALCULATIONS
+  // ============================================================================
+
   // Get days for current month
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
   
   // Navigation functions
-  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
-  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
-  const prevDay = () => setSelectedDay(addDays(selectedDay, -1));
-  const nextDay = () => setSelectedDay(addDays(selectedDay, 1));
+  const prevMonth = () => {
+    const newMonth = subMonths(currentMonth, 1);
+    setCurrentMonth(newMonth);
+    console.log('⬅️ Navigated to previous month:', format(newMonth, 'MMMM yyyy'));
+  };
+  
+  const nextMonth = () => {
+    const newMonth = addMonths(currentMonth, 1);
+    setCurrentMonth(newMonth);
+    console.log('➡️ Navigated to next month:', format(newMonth, 'MMMM yyyy'));
+  };
+  
+  const prevDay = () => {
+    const newDay = addDays(selectedDay, -1);
+    setSelectedDay(newDay);
+    console.log('⬅️ Navigated to previous day:', format(newDay, 'yyyy-MM-dd'));
+  };
+  
+  const nextDay = () => {
+    const newDay = addDays(selectedDay, 1);
+    setSelectedDay(newDay);
+    console.log('➡️ Navigated to next day:', format(newDay, 'yyyy-MM-dd'));
+  };
   
   // Weekly navigation functions
   const [currentWeekStart, setCurrentWeekStart] = useState(new Date(2025, 4, 18)); // May 18, 2025
@@ -804,26 +315,47 @@ const Calendar = () => {
   const nextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
   
   
-  // Filter classes by instructor
-  const instructorClasses = dummyClasses.filter(cls => cls.instructor === instructor);
+  // Get current instructor name for display
+  const getCurrentInstructorName = () => {
+    const instructor = instructors.find(inst => inst.id === selectedInstructorId);
+    return instructor ? `${instructor.firstName} ${instructor.lastName}` : "Select Instructor";
+  };
+  
+  // Filter classes by instructor (always filtered since no "All Instructors" option)
+  const getFilteredClasses = () => {
+    return classes; // Classes are already filtered by instructor in the API call
+  };
   
   // Get classes for a specific day
   const getClassesForDay = (day: Date) => {
     const dateString = format(day, 'yyyy-MM-dd');
-    return instructorClasses.filter(cls => cls.date === dateString);
+    const filteredClasses = getFilteredClasses();
+    return filteredClasses.filter(cls => cls.date === dateString);
   };
   
   // Get classes for selected date in form
   const getClassesForSelectedDate = () => {
-    return dummyClasses.filter(cls => cls.date === formData.date);
+    return classes.filter(cls => cls.date === formData.date);
+  };
+
+  // Get instructor name by ID
+  const getInstructorNameById = (instructorId: string) => {
+    const instructor = instructors.find(inst => inst.id === instructorId);
+    return instructor ? `${instructor.firstName} ${instructor.lastName}` : "Unknown Instructor";
+  };
+
+  // Get group name by ID
+  const getGroupNameById = (groupId: string) => {
+    const group = groups.find(grp => grp.id === groupId);
+    return group ? group.name : "Unknown Group";
   };
   
   // Check instructor availability
   const checkInstructorConflict = () => {
     if (!formData.instructor || !formData.date || !formData.startTime) return null;
     
-    const conflictingClass = dummyClasses.find(cls => 
-      cls.instructor === formData.instructor && 
+    const conflictingClass = classes.find(cls => 
+      cls.instructorId === formData.instructor && 
       cls.date === formData.date && 
       cls.startTime === formData.startTime
     );
@@ -833,7 +365,8 @@ const Calendar = () => {
   
   // Get students for selected group
   const getStudentsForGroup = (groupId: string) => {
-    return dummyStudents.filter(student => student.group === groupId);
+    // This will be implemented when we have group-student relationships
+    return students.filter(student => student.isActive);
   };
   
   // Handle form field changes
@@ -871,37 +404,79 @@ const Calendar = () => {
     if (formData.selectedGroup) {
       return getStudentsForGroup(formData.selectedGroup);
     }
-    return dummyStudents.filter(student => formData.selectedStudents.includes(student.name));
+    return students.filter(student => formData.selectedStudents.includes(student.name));
   };
   
   // Handle form submission
-  const handleSubmit = () => {
-    // Basic validation
-    if (!formData.type || !formData.date || !formData.instructor) {
-      alert("Please fill in all required fields");
-      return;
+  const handleSubmit = async () => {
+    try {
+      // Basic validation
+      if (!formData.type || !formData.date || !formData.instructor) {
+        toast({
+          title: "Validation Error",
+          description: "Please fill in all required fields (type, date, instructor).",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (!formData.selectedGroup && formData.selectedStudents.length === 0) {
+        toast({
+          title: "Validation Error", 
+          description: "Please select students or a group for the class.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      console.log('📝 Creating new class...', formData);
+      
+      // Prepare class data for creation
+      const classData = {
+        type: formData.type,
+        date: formData.date,
+        startTime: formData.startTime,
+        duration: formData.duration,
+        instructor: formData.instructor,
+        selectedStudents: formData.selectedStudents,
+        selectedGroup: formData.selectedGroup,
+        notes: formData.notes,
+        title: `${formData.type} Class`, // Default title
+      };
+      
+      // Create the class
+      await createClass(classData);
+      
+      // Show success message
+      toast({
+        title: "Class Created",
+        description: "The class has been successfully scheduled.",
+      });
+      
+      // Refresh classes data
+      await refreshClasses();
+      
+      // Reset form and close modal
+      setFormData({
+        type: "",
+        date: format(new Date(), 'yyyy-MM-dd'),
+        startTime: "10:00",
+        duration: 60,
+        instructor: "",
+        selectedStudents: [],
+        selectedGroup: "",
+        notes: "",
+      });
+      setModalOpen(false);
+      
+    } catch (error) {
+      console.error('❌ Failed to create class:', error);
+      toast({
+        title: "Error Creating Class",
+        description: error instanceof Error ? error.message : "Failed to create class. Please try again.",
+        variant: "destructive",
+      });
     }
-    
-    if (!formData.selectedGroup && formData.selectedStudents.length === 0) {
-      alert("Please select students or a group");
-      return;
-    }
-    
-    // Show success message
-    alert("Class created successfully!");
-    
-    // Reset form and close modal
-    setFormData({
-      type: "",
-      date: format(new Date(), 'yyyy-MM-dd'),
-      startTime: "10:00",
-      duration: 60,
-      instructor: "",
-      selectedStudents: [],
-      selectedGroup: "",
-      notes: "",
-    });
-    setModalOpen(false);
   };
 
   // 🧪 TEMPORARY TEST FUNCTION - Remove this later
@@ -1361,11 +936,27 @@ const Calendar = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Classes List - Left side */}
           <div className="lg:col-span-2 space-y-4">
-            {sortedClasses.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-12">
+                <Loader2 className="mx-auto h-12 w-12 text-muted-foreground mb-4 animate-spin" />
+                <h3 className="text-lg font-medium text-muted-foreground mb-2">Loading classes...</h3>
+                <p className="text-sm text-muted-foreground">Please wait while we load the schedule.</p>
+              </div>
+            ) : sortedClasses.length === 0 ? (
               <div className="text-center py-12">
                 <CalendarIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium text-muted-foreground mb-2">No classes scheduled</h3>
-                <p className="text-sm text-muted-foreground">There are no classes scheduled for this day.</p>
+                <p className="text-sm text-muted-foreground">
+                  There are no classes scheduled for {format(selectedDay, 'MMMM d, yyyy')}.
+                </p>
+                <Button 
+                  variant="outline" 
+                  className="mt-4"
+                  onClick={() => setModalOpen(true)}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Schedule a Class
+                </Button>
               </div>
             ) : (
               <div className="grid gap-4">
@@ -1526,11 +1117,27 @@ const Calendar = () => {
   return (
     <PageLayout>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Calendar</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold">Calendar</h1>
+          {(loading || instructorsLoading || groupsLoading || studentsLoading) && (
+            <div className="flex items-center text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading...
+            </div>
+          )}
+        </div>
         <div className="flex gap-2">
           {/* 🧪 TEMPORARY TEST BUTTON - Remove this later */}
           <Button variant="outline" onClick={testServices}>
             🧪 Test Services
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={refreshClasses}
+            disabled={loading}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
           </Button>
           <Button onClick={() => setModalOpen(true)}>
             <Plus className="mr-1 h-4 w-4" />
@@ -1576,11 +1183,17 @@ const Calendar = () => {
                     <SelectValue placeholder="Select instructor" />
                   </SelectTrigger>
                   <SelectContent>
-                    {instructors.map((instructor) => (
-                      <SelectItem key={instructor} value={instructor}>
-                        {instructor}
+                    {instructorsLoading ? (
+                      <SelectItem value="" disabled>Loading instructors...</SelectItem>
+                    ) : instructorOptions.length === 0 ? (
+                      <SelectItem value="" disabled>No instructors available</SelectItem>
+                    ) : (
+                      instructorOptions.map((instructor) => (
+                        <SelectItem key={instructor.id} value={instructor.id}>
+                          {instructor.name}
                       </SelectItem>
-                    ))}
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1619,11 +1232,17 @@ const Calendar = () => {
                         <SelectValue placeholder="Select a group for theory class" />
                       </SelectTrigger>
                       <SelectContent>
-                        {dummyGroups.map((group) => (
+                        {groupsLoading ? (
+                          <SelectItem value="" disabled>Loading groups...</SelectItem>
+                        ) : groupOptions.length === 0 ? (
+                          <SelectItem value="" disabled>No groups available</SelectItem>
+                        ) : (
+                          groupOptions.map((group) => (
                           <SelectItem key={group.id} value={group.id}>
-                            {group.name} ({group.studentCount} students)
+                              {group.name} ({group.currentEnrollment} students)
                           </SelectItem>
-                        ))}
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </>
@@ -1640,8 +1259,12 @@ const Calendar = () => {
                           className="w-full justify-between"
                         >
                           {formData.selectedStudents[0] 
-                            ? dummyStudents.find(student => student.name === formData.selectedStudents[0])?.name + 
-                              ` (${dummyStudents.find(student => student.name === formData.selectedStudents[0])?.id})`
+                            ? students.find(student => student.name === formData.selectedStudents[0])?.name + 
+                              ` (${students.find(student => student.name === formData.selectedStudents[0])?.studentId})`
+                            : studentsLoading 
+                              ? "Loading students..."
+                              : students.length === 0
+                                ? "No students available"
                             : "Select a student for practical class..."
                           }
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -1653,7 +1276,15 @@ const Calendar = () => {
                           <CommandList>
                             <CommandEmpty>No student found.</CommandEmpty>
                             <CommandGroup>
-                              {dummyStudents.map((student) => (
+                              {studentsLoading ? (
+                                <CommandItem disabled>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Loading students...
+                                </CommandItem>
+                              ) : students.length === 0 ? (
+                                <CommandItem disabled>No students available</CommandItem>
+                              ) : (
+                                students.map((student) => (
                                 <CommandItem
                                   key={student.id}
                                   value={student.name}
@@ -1669,9 +1300,10 @@ const Calendar = () => {
                                       formData.selectedStudents[0] === student.name ? "opacity-100" : "opacity-0"
                                     )}
                                   />
-                                  {student.name} ({student.id})
+                                    {student.name} ({student.studentId})
                                 </CommandItem>
-                              ))}
+                                ))
+                              )}
                             </CommandGroup>
                           </CommandList>
                         </Command>
@@ -1708,13 +1340,36 @@ const Calendar = () => {
         <CardContent className="p-6">
           <div className="space-y-4">
             {/* Instructor Tabs with View Toggle */}
-            <Tabs defaultValue="Mike Brown" onValueChange={setInstructor}>
+            <Tabs 
+              value={selectedInstructorId} 
+              onValueChange={setSelectedInstructorId}
+            >
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
-                <TabsList>
-                  <TabsTrigger value="Mike Brown">Mike Brown</TabsTrigger>
-                  <TabsTrigger value="Lisa Taylor">Lisa Taylor</TabsTrigger>
-                  <TabsTrigger value="James Wilson">James Wilson</TabsTrigger>
-                </TabsList>
+                <div className="flex items-center gap-4">
+                  <TabsList>
+                    {instructorsLoading ? (
+                      <TabsTrigger value="" disabled>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </TabsTrigger>
+                    ) : instructors.length === 0 ? (
+                      <TabsTrigger value="" disabled>No instructors</TabsTrigger>
+                    ) : (
+                      instructors.map((instructor) => (
+                        <TabsTrigger key={instructor.id} value={instructor.id}>
+                          {instructor.firstName} {instructor.lastName}
+                        </TabsTrigger>
+                      ))
+                    )}
+                  </TabsList>
+                  
+                  {/* Classes count indicator */}
+                  {!loading && selectedInstructorId && (
+                    <div className="text-sm text-muted-foreground">
+                      {classes.length} {classes.length === 1 ? 'class' : 'classes'} for {getCurrentInstructorName()} in {format(currentMonth, 'MMMM yyyy')}
+                    </div>
+                  )}
+                </div>
                 
                 {/* View Mode Toggle */}
                 <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value)}>
@@ -1725,9 +1380,26 @@ const Calendar = () => {
               </div>
               
               {/* Calendar View */}
-              {viewMode === "month" ? renderMonthView() : 
-               viewMode === "week" ? renderWeekView() : 
-               renderDayView()}
+              {!selectedInstructorId && !instructorsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <UserRound className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium text-muted-foreground mb-2">Select an Instructor</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Choose an instructor from the tabs above to view their calendar.
+                    </p>
+                  </div>
+                </div>
+              ) : loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin mr-2" />
+                  <span className="text-lg">Loading calendar...</span>
+                </div>
+              ) : (
+                viewMode === "month" ? renderMonthView() : 
+                viewMode === "week" ? renderWeekView() : 
+                renderDayView()
+              )}
             </Tabs>
           </div>
         </CardContent>
@@ -1783,8 +1455,8 @@ const Calendar = () => {
                 <div className="flex items-start space-x-3">
                   <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium">Contact</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.phone}</p>
+                    <p className="text-sm font-medium">Location</p>
+                    <p className="text-sm text-muted-foreground">{selectedClass.location || "TBD"}</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-3">
