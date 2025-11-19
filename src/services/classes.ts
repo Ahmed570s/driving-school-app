@@ -432,72 +432,93 @@ export const updateClass = async (id: string, updates: Partial<ClassItem>): Prom
     
     // Handle time updates
     if (updates.date || updates.startTime || updates.duration) {
+      console.log('🕐 Processing time updates...', { 
+        date: updates.date, 
+        startTime: updates.startTime, 
+        duration: updates.duration 
+      });
+      
       // We need the current class data to calculate new times
       const currentClass = await getClassById(id);
       if (!currentClass) {
         throw new Error('Class not found for update');
       }
       
+      console.log('📋 Current class data:', {
+        date: currentClass.date,
+        startTime: currentClass.startTime,
+        duration: currentClass.duration
+      });
+      
       const date = updates.date || currentClass.date;
       const startTime = updates.startTime || currentClass.startTime;
-      const duration = updates.duration ? `${updates.duration} minutes` : currentClass.duration;
-      const durationMinutes = parseInt(duration.split(' ')[0]);
+      
+      // Handle duration more carefully
+      let durationMinutes: number;
+      if (updates.duration !== undefined) {
+        // New duration provided - could be string like "90 minutes" or number
+        if (typeof updates.duration === 'string') {
+          durationMinutes = parseInt(updates.duration.split(' ')[0]);
+          console.log('🔢 Using new duration from string:', durationMinutes, 'from', updates.duration);
+        } else {
+          durationMinutes = updates.duration;
+          console.log('🔢 Using new duration as number:', durationMinutes);
+        }
+      } else {
+        // Parse existing duration string like "90 minutes"
+        const durationStr = currentClass.duration;
+        durationMinutes = parseInt(durationStr.split(' ')[0]);
+        console.log('🔄 Using existing duration:', durationMinutes, 'from', durationStr);
+      }
+      
+      if (isNaN(durationMinutes) || durationMinutes <= 0) {
+        throw new Error(`Invalid duration: ${durationMinutes}`);
+      }
+      
+      console.log('⏰ Calculating times:', { date, startTime, durationMinutes });
       
       const startDateTime = new Date(`${date}T${startTime}:00`);
       const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
       
+      if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+        throw new Error(`Invalid date/time calculation: ${date}T${startTime}:00`);
+      }
+      
       dbUpdates.start_time = startDateTime.toISOString();
       dbUpdates.end_time = endDateTime.toISOString();
+      
+      console.log('✅ Time calculations complete:', {
+        start_time: dbUpdates.start_time,
+        end_time: dbUpdates.end_time
+      });
     }
 
     // Add updated timestamp
     dbUpdates.updated_at = new Date().toISOString();
 
-    const { data, error } = await supabase
+    console.log('📝 Database updates to apply:', dbUpdates);
+
+    // First, update the class
+    const { error: updateError } = await supabase
       .from('classes')
       .update(dbUpdates)
-      .eq('id', id)
-      .select(`
-        *,
-        instructors!inner (
-          id,
-          employee_id,
-          profiles!inner (
-            first_name,
-            last_name,
-            email,
-            phone
-          )
-        ),
-        students (
-          id,
-          student_id,
-          profiles (
-            first_name,
-            last_name,
-            email,
-            phone
-          )
-        ),
-        groups (
-          id,
-          name,
-          description
-        )
-      `)
-      .single();
+      .eq('id', id);
 
-    if (error) {
-      console.error('❌ Error updating class:', error);
-      throw new Error('Failed to update class in database');
+    if (updateError) {
+      console.error('❌ Error updating class:', updateError);
+      throw new Error(`Failed to update class: ${updateError.message}`);
     }
 
-    if (!data) {
-      throw new Error('No data returned after updating class');
+    console.log('✅ Class updated successfully, fetching updated data...');
+
+    // Then fetch the updated class with all relations
+    const updatedClass = await getClassById(id);
+    if (!updatedClass) {
+      throw new Error('Failed to fetch updated class data');
     }
 
-    console.log('✅ Successfully updated class');
-    return convertToClassItem(data);
+    console.log('✅ Successfully updated and fetched class:', updatedClass);
+    return updatedClass;
 
   } catch (error) {
     console.error('💥 Error in updateClass:', error);

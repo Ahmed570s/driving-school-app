@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { PageLayout } from "@/components/ui/page-layout";
 import { Button } from "@/components/ui/button";
-import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, Bookmark, UserRound, Calendar as CalendarIcon, AlertTriangle, Check, ChevronsUpDown, Loader2, RefreshCw } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, Bookmark, UserRound, Calendar as CalendarIcon, AlertTriangle, Check, ChevronsUpDown, Loader2, RefreshCw, Edit, Save, X, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -108,6 +108,25 @@ const Calendar = () => {
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isUpdatingClass, setIsUpdatingClass] = useState(false);
+  const [editFormData, setEditFormData] = useState<ClassFormData>({
+    type: "",
+    date: "",
+    startTime: "",
+    duration: 60,
+    instructor: "",
+    selectedStudents: [],
+    selectedGroup: "",
+    notes: "",
+    title: "",
+  });
+  
+  // Delete confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingClass, setIsDeletingClass] = useState(false);
+  
   // Add Class Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [studentComboboxOpen, setStudentComboboxOpen] = useState(false);
@@ -117,7 +136,7 @@ const Calendar = () => {
     date: format(new Date(), 'yyyy-MM-dd'),
     startTime: "10:00",
     duration: 60,
-    instructor: selectedInstructorId || "", // Default to current instructor
+    instructor: "", // Let user choose instructor
     selectedStudents: [],
     selectedGroup: "",
     notes: "",
@@ -272,14 +291,15 @@ const Calendar = () => {
   }, [currentMonth, selectedInstructorId, instructorsLoading]); // Reload when month or instructor changes
 
   // Update form instructor when selected instructor changes
+  // Note: Removed auto-sync of form instructor with selected tab
+  // Users should manually choose instructor in the form
+
+  // Refresh classes when instructor or month changes
   useEffect(() => {
-    if (selectedInstructorId && formData.instructor !== selectedInstructorId) {
-      setFormData(prev => ({
-        ...prev,
-        instructor: selectedInstructorId
-      }));
+    if (selectedInstructorId) {
+      refreshClasses();
     }
-  }, [selectedInstructorId, formData.instructor]);
+  }, [selectedInstructorId, currentMonth]);
 
   // Refresh function that can be called after create/update/delete
   const refreshClasses = async () => {
@@ -546,7 +566,13 @@ const Calendar = () => {
         description: `${newClass.type} class scheduled for ${format(new Date(formData.date), 'MMM d, yyyy')} at ${formData.startTime}.`,
       });
       
-      // Refresh classes data
+      // Switch to the instructor's tab if different from current
+      if (formData.instructor !== selectedInstructorId) {
+        console.log(`🔄 Switching to instructor tab: ${formData.instructor}`);
+        setSelectedInstructorId(formData.instructor);
+      }
+      
+      // Refresh classes data (will load classes for the correct instructor)
       await refreshClasses();
       
       // Reset form and close modal
@@ -830,7 +856,233 @@ const Calendar = () => {
   // Handle class click
   const handleClassClick = (cls: ClassItem) => {
     setSelectedClass(cls);
+    setIsEditMode(false); // Reset edit mode
     setSheetOpen(true);
+  };
+
+  // Enter edit mode
+  const enterEditMode = () => {
+    if (!selectedClass) return;
+    
+    console.log('🔧 Entering edit mode for class:', selectedClass);
+    
+    // Populate edit form with current class data
+    setEditFormData({
+      type: selectedClass.type,
+      date: selectedClass.date,
+      startTime: selectedClass.startTime,
+      duration: parseInt(selectedClass.duration.split(' ')[0]), // Extract number from "60 minutes"
+      instructor: selectedClass.instructorId,
+      selectedStudents: selectedClass.studentId ? [selectedClass.student] : [],
+      selectedGroup: selectedClass.groupId || "",
+      notes: selectedClass.notes,
+      title: selectedClass.className,
+    });
+    
+    console.log('📝 Edit form populated with data:', {
+      type: selectedClass.type,
+      title: selectedClass.className,
+      date: selectedClass.date,
+      startTime: selectedClass.startTime,
+      duration: parseInt(selectedClass.duration.split(' ')[0])
+    });
+    
+    setIsEditMode(true);
+  };
+
+  // Cancel edit mode
+  const cancelEdit = () => {
+    setIsEditMode(false);
+    setShowDeleteConfirm(false); // Reset delete confirmation
+    setEditFormData({
+      type: "",
+      date: "",
+      startTime: "",
+      duration: 60,
+      instructor: "",
+      selectedStudents: [],
+      selectedGroup: "",
+      notes: "",
+      title: "",
+    });
+  };
+
+  // Handle edit form changes
+  const handleEditFormChange = (field: keyof ClassFormData, value: any) => {
+    setEditFormData(prev => ({
+      ...prev,
+      [field]: value,
+      // Reset student selection when group is selected and vice versa
+      ...(field === 'selectedGroup' && value ? { selectedStudents: [] } : {}),
+      ...(field === 'selectedStudents' && value.length > 0 ? { selectedGroup: "" } : {}),
+      // Reset title when type changes
+      ...(field === 'type' && value !== prev.type ? { title: "" } : {}),
+    }));
+  };
+
+  // Handle class update
+  const handleUpdateClass = async () => {
+    if (!selectedClass) return;
+
+    try {
+      setIsUpdatingClass(true);
+
+      // Validate edit form
+      const validationErrors = validateEditForm();
+      if (validationErrors.length > 0) {
+        toast({
+          title: "Validation Error",
+          description: validationErrors.join(". "),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('📝 Updating class...', selectedClass.id, editFormData);
+
+      // Prepare update data (type is read-only, so we keep the existing type)
+      const updateData: Partial<ClassItem> = {
+        className: editFormData.title,
+        type: selectedClass.type, // Keep existing type
+        date: editFormData.date,
+        startTime: editFormData.startTime,
+        duration: `${editFormData.duration} minutes`, // Keep as string for ClassItem interface
+        instructorId: editFormData.instructor,
+        studentId: selectedClass.type === "Practical" ? 
+          (editFormData.selectedStudents[0] ? 
+            students.find(s => s.name === editFormData.selectedStudents[0])?.id : null) : null,
+        groupId: selectedClass.type === "Theory" ? editFormData.selectedGroup : null,
+        notes: editFormData.notes,
+      };
+
+      // Update the class
+      const updatedClass = await updateClass(selectedClass.id, updateData);
+
+      // Show success message
+      toast({
+        title: "Class Updated Successfully",
+        description: `${updatedClass.type} class "${updatedClass.className}" has been updated.`,
+      });
+
+      // Refresh classes data
+      await refreshClasses();
+
+      // Update selected class with new data
+      setSelectedClass(updatedClass);
+
+      // Exit edit mode
+      setIsEditMode(false);
+
+    } catch (error) {
+      console.error('❌ Failed to update class:', error);
+      
+      // More detailed error message
+      let errorMessage = "Failed to update class. Please try again.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        console.error('❌ Full error details:', error);
+      }
+      
+      toast({
+        title: "Error Updating Class",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingClass(false);
+    }
+  };
+
+  // Validate edit form
+  const validateEditForm = () => {
+    const errors: string[] = [];
+
+    // Required fields (type is read-only, so we use selectedClass.type)
+    if (!editFormData.title) errors.push("Class title is required");
+    if (!editFormData.date) errors.push("Date is required");
+    if (!editFormData.instructor) errors.push("Instructor is required");
+    if (!editFormData.startTime) errors.push("Start time is required");
+
+    // Date validation
+    const selectedDate = new Date(editFormData.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (selectedDate < today) {
+      errors.push("Cannot schedule classes in the past");
+    }
+
+    // Student/Group validation (use selectedClass.type since type is read-only)
+    if (selectedClass?.type === "Theory") {
+      if (!editFormData.selectedGroup) {
+        errors.push("Please select a group for theory classes");
+      }
+    } else if (selectedClass?.type === "Practical") {
+      if (editFormData.selectedStudents.length === 0) {
+        errors.push("Please select a student for practical classes");
+      }
+      if (editFormData.selectedStudents.length > 1) {
+        errors.push("Practical classes can only have one student");
+      }
+    }
+
+    // Time validation
+    const [hours, minutes] = editFormData.startTime.split(':').map(Number);
+    if (hours < 8 || hours > 20) {
+      errors.push("Classes must be scheduled between 8:00 AM and 8:00 PM");
+    }
+
+    // Duration validation
+    if (editFormData.duration < 30 || editFormData.duration > 240) {
+      errors.push("Class duration must be between 30 and 240 minutes");
+    }
+
+    return errors;
+  };
+
+  // Handle class deletion
+  const handleDeleteClass = async () => {
+    if (!selectedClass) return;
+
+    try {
+      setIsDeletingClass(true);
+
+      console.log('🗑️ Deleting class...', selectedClass.id);
+
+      // Delete the class
+      await deleteClass(selectedClass.id);
+
+      // Show success message
+      toast({
+        title: "Class Deleted Successfully",
+        description: `${selectedClass.type} class "${selectedClass.className}" has been deleted.`,
+      });
+
+      // Refresh classes data
+      await refreshClasses();
+
+      // Close the sheet and reset states
+      setSheetOpen(false);
+      setIsEditMode(false);
+      setShowDeleteConfirm(false);
+      setSelectedClass(null);
+
+    } catch (error) {
+      console.error('❌ Failed to delete class:', error);
+      
+      let errorMessage = "Failed to delete class. Please try again.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      toast({
+        title: "Error Deleting Class",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingClass(false);
+    }
   };
   
   // Render monthly view calendar
@@ -1331,7 +1583,7 @@ const Calendar = () => {
                   onValueChange={(value) => handleFormChange('instructor', value)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select instructor" />
+                    <SelectValue placeholder="Choose any instructor" />
                   </SelectTrigger>
                   <SelectContent>
                     {instructorsLoading ? (
@@ -1347,6 +1599,9 @@ const Calendar = () => {
                     )}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Class will appear in the selected instructor's calendar
+                </p>
               </div>
             </div>
 
@@ -1637,71 +1892,289 @@ const Calendar = () => {
       </Card>
 
       {/* Class Details Sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => {
+        setSheetOpen(open);
+        if (!open) {
+          setIsEditMode(false); // Reset edit mode when closing
+          setShowDeleteConfirm(false); // Reset delete confirmation when closing
+        }
+      }}>
         <SheetContent className="sm:max-w-md">
           {selectedClass && (
             <>
               <SheetHeader>
-                <SheetTitle>{selectedClass.className}</SheetTitle>
-                <SheetDescription>{selectedClass.type} Session</SheetDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <SheetTitle>{isEditMode ? "Edit Class" : selectedClass.className}</SheetTitle>
+                    <SheetDescription>
+                      {isEditMode ? "Modify class details" : `${selectedClass.type} Session`}
+                    </SheetDescription>
+                  </div>
+                  {!isEditMode && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={enterEditMode}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  )}
+                </div>
               </SheetHeader>
-              <div className="mt-6 space-y-4">
-                <div className="flex items-start space-x-3">
-                  <UserRound className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Student</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.student}</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Group</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.group}</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <UserRound className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Instructor</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.instructor}</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <CalendarIcon className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Date & Time</p>
-                    <p className="text-sm text-muted-foreground">
-                      {format(new Date(selectedClass.date), 'MMMM d, yyyy')} • {selectedClass.startTime} - {selectedClass.endTime}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Duration</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.duration}</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Location</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.location || "TBD"}</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <Bookmark className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Notes</p>
-                    <p className="text-sm text-muted-foreground">{selectedClass.notes}</p>
-                  </div>
-                </div>
-              </div>
               <div className="mt-6">
-                <SheetClose asChild>
-                  <Button className="w-full">Close</Button>
-                </SheetClose>
+                {isEditMode ? (
+                  // Edit Mode - Form Fields
+                  <div className="space-y-4">
+                    {/* Class Title (Type is read-only) */}
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-type-display">Class Type</Label>
+                      <Input 
+                        value={selectedClass.type} 
+                        disabled 
+                        className="bg-muted text-muted-foreground"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        To change class type, delete this class and create a new one
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-title">Class Title *</Label>
+                      <Select
+                        value={editFormData.title}
+                        onValueChange={(value) => handleEditFormChange('title', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={`Select ${selectedClass.type.toLowerCase()} class title`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {selectedClass.type === "Theory" ? (
+                            THEORY_CLASS_TITLES.map((title) => (
+                              <SelectItem key={title} value={title}>
+                                {title}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            PRACTICAL_CLASS_TITLES.map((title, index) => {
+                              const sessionNumber = index + 1;
+                              const phase = getPracticalSessionPhase(sessionNumber);
+                              return (
+                                <SelectItem key={title} value={title}>
+                                  {title} (Phase {phase})
+                                </SelectItem>
+                              );
+                            })
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Date and Time */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-date">Date *</Label>
+                        <Input
+                          id="edit-date"
+                          type="date"
+                          value={editFormData.date}
+                          onChange={(e) => handleEditFormChange('date', e.target.value)}
+                          min={format(new Date(), 'yyyy-MM-dd')}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-time">Start Time *</Label>
+                        <Input
+                          id="edit-time"
+                          type="time"
+                          value={editFormData.startTime}
+                          onChange={(e) => handleEditFormChange('startTime', e.target.value)}
+                          min="08:00"
+                          max="20:00"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Duration */}
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-duration">Duration *</Label>
+                      <Select 
+                        value={editFormData.duration.toString()} 
+                        onValueChange={(value) => handleEditFormChange('duration', parseInt(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="30">30 minutes</SelectItem>
+                          <SelectItem value="60">60 minutes</SelectItem>
+                          <SelectItem value="90">90 minutes</SelectItem>
+                          <SelectItem value="120">120 minutes</SelectItem>
+                          <SelectItem value="180">180 minutes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Notes */}
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-notes">Notes</Label>
+                      <Textarea
+                        id="edit-notes"
+                        value={editFormData.notes}
+                        onChange={(e) => handleEditFormChange('notes', e.target.value)}
+                        placeholder="Additional notes or instructions..."
+                        rows={3}
+                      />
+                    </div>
+
+                    {/* Delete Class Section */}
+                    <div className="border-t pt-4 mt-6">
+                      <div className="space-y-2">
+                        <Label className="text-destructive">Danger Zone</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Permanently delete this class. This action cannot be undone.
+                        </p>
+                        {!showDeleteConfirm ? (
+                          <Button
+                            variant="destructive"
+                            onClick={() => setShowDeleteConfirm(true)}
+                            disabled={isUpdatingClass || isDeletingClass}
+                            className="w-full"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Class
+                          </Button>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-destructive">
+                              Are you sure you want to delete this class?
+                            </p>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                onClick={() => setShowDeleteConfirm(false)}
+                                disabled={isDeletingClass}
+                                className="flex-1"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                onClick={handleDeleteClass}
+                                disabled={isDeletingClass}
+                                className="flex-1"
+                              >
+                                {isDeletingClass ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Deleting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-4">
+                      <Button
+                        variant="outline"
+                        onClick={cancelEdit}
+                        disabled={isUpdatingClass}
+                        className="flex-1"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleUpdateClass}
+                        disabled={isUpdatingClass || !editFormData.title}
+                        className="flex-1"
+                      >
+                        {isUpdatingClass ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Updating...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4 mr-2" />
+                            Save Changes
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  // View Mode - Class Details
+                  <>
+                    <div className="space-y-4">
+                      <div className="flex items-start space-x-3">
+                        <UserRound className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Student</p>
+                          <p className="text-sm text-muted-foreground">{selectedClass.student}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start space-x-3">
+                        <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Group</p>
+                          <p className="text-sm text-muted-foreground">{selectedClass.group}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start space-x-3">
+                        <UserRound className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Instructor</p>
+                          <p className="text-sm text-muted-foreground">{selectedClass.instructor}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start space-x-3">
+                        <CalendarIcon className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Date & Time</p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(new Date(selectedClass.date), 'MMMM d, yyyy')} • {selectedClass.startTime} - {selectedClass.endTime}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start space-x-3">
+                        <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Duration</p>
+                          <p className="text-sm text-muted-foreground">{selectedClass.duration}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start space-x-3">
+                        <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Location</p>
+                          <p className="text-sm text-muted-foreground">{selectedClass.location || "TBD"}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start space-x-3">
+                        <Bookmark className="h-5 w-5 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium">Notes</p>
+                          <p className="text-sm text-muted-foreground">{selectedClass.notes}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-6">
+                      <SheetClose asChild>
+                        <Button className="w-full">Close</Button>
+                      </SheetClose>
+                    </div>
+                  </>
+                )}
               </div>
             </>
           )}
