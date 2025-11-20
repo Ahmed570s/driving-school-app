@@ -430,7 +430,7 @@ export const updateClass = async (id: string, updates: Partial<ClassItem>): Prom
     if (updates.studentId !== undefined) dbUpdates.student_id = updates.studentId;
     if (updates.groupId !== undefined) dbUpdates.group_id = updates.groupId;
     
-    // Handle time updates
+    // Handle time updates - optimized to avoid extra getClassById call when possible
     if (updates.date || updates.startTime || updates.duration) {
       console.log('🕐 Processing time updates...', { 
         date: updates.date, 
@@ -438,59 +438,102 @@ export const updateClass = async (id: string, updates: Partial<ClassItem>): Prom
         duration: updates.duration 
       });
       
-      // We need the current class data to calculate new times
-      const currentClass = await getClassById(id);
-      if (!currentClass) {
-        throw new Error('Class not found for update');
-      }
-      
-      console.log('📋 Current class data:', {
-        date: currentClass.date,
-        startTime: currentClass.startTime,
-        duration: currentClass.duration
-      });
-      
-      const date = updates.date || currentClass.date;
-      const startTime = updates.startTime || currentClass.startTime;
-      
-      // Handle duration more carefully
-      let durationMinutes: number;
-      if (updates.duration !== undefined) {
-        // New duration provided - could be string like "90 minutes" or number
+      // If we have all required time fields, we can calculate directly
+      if (updates.date && updates.startTime && updates.duration) {
+        console.log('⚡ Fast path: All time fields provided');
+        
+        const date = updates.date;
+        const startTime = updates.startTime;
+        
+        // Handle duration parsing
+        let durationMinutes: number;
         if (typeof updates.duration === 'string') {
           durationMinutes = parseInt(updates.duration.split(' ')[0]);
-          console.log('🔢 Using new duration from string:', durationMinutes, 'from', updates.duration);
+          console.log('🔢 Parsed duration from string:', durationMinutes, 'from', updates.duration);
         } else {
           durationMinutes = updates.duration;
-          console.log('🔢 Using new duration as number:', durationMinutes);
+          console.log('🔢 Using duration as number:', durationMinutes);
         }
+        
+        if (isNaN(durationMinutes) || durationMinutes <= 0) {
+          throw new Error(`Invalid duration: ${durationMinutes}`);
+        }
+        
+        console.log('⏰ Calculating times:', { date, startTime, durationMinutes });
+        
+        const startDateTime = new Date(`${date}T${startTime}:00`);
+        const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
+        
+        if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+          throw new Error(`Invalid date/time calculation: ${date}T${startTime}:00`);
+        }
+        
+        dbUpdates.start_time = startDateTime.toISOString();
+        dbUpdates.end_time = endDateTime.toISOString();
+        // Note: duration_minutes is a computed column, don't update it directly
+        
+        console.log('✅ Time calculations complete:', {
+          start_time: dbUpdates.start_time,
+          end_time: dbUpdates.end_time
+        });
       } else {
-        // Parse existing duration string like "90 minutes"
-        const durationStr = currentClass.duration;
-        durationMinutes = parseInt(durationStr.split(' ')[0]);
-        console.log('🔄 Using existing duration:', durationMinutes, 'from', durationStr);
+        // Fallback: need to fetch current class data for missing fields
+        console.log('🐌 Slow path: Need to fetch current class data');
+        
+        const currentClass = await getClassById(id);
+        if (!currentClass) {
+          throw new Error('Class not found for update');
+        }
+        
+        console.log('📋 Current class data:', {
+          date: currentClass.date,
+          startTime: currentClass.startTime,
+          duration: currentClass.duration
+        });
+        
+        const date = updates.date || currentClass.date;
+        const startTime = updates.startTime || currentClass.startTime;
+        
+        // Handle duration more carefully
+        let durationMinutes: number;
+        if (updates.duration !== undefined) {
+          // New duration provided - could be string like "90 minutes" or number
+          if (typeof updates.duration === 'string') {
+            durationMinutes = parseInt(updates.duration.split(' ')[0]);
+            console.log('🔢 Using new duration from string:', durationMinutes, 'from', updates.duration);
+          } else {
+            durationMinutes = updates.duration;
+            console.log('🔢 Using new duration as number:', durationMinutes);
+          }
+        } else {
+          // Parse existing duration string like "90 minutes"
+          const durationStr = currentClass.duration;
+          durationMinutes = parseInt(durationStr.split(' ')[0]);
+          console.log('🔄 Using existing duration:', durationMinutes, 'from', durationStr);
+        }
+        
+        if (isNaN(durationMinutes) || durationMinutes <= 0) {
+          throw new Error(`Invalid duration: ${durationMinutes}`);
+        }
+        
+        console.log('⏰ Calculating times:', { date, startTime, durationMinutes });
+        
+        const startDateTime = new Date(`${date}T${startTime}:00`);
+        const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
+        
+        if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+          throw new Error(`Invalid date/time calculation: ${date}T${startTime}:00`);
+        }
+        
+        dbUpdates.start_time = startDateTime.toISOString();
+        dbUpdates.end_time = endDateTime.toISOString();
+        // Note: duration_minutes is a computed column, don't update it directly
+        
+        console.log('✅ Time calculations complete:', {
+          start_time: dbUpdates.start_time,
+          end_time: dbUpdates.end_time
+        });
       }
-      
-      if (isNaN(durationMinutes) || durationMinutes <= 0) {
-        throw new Error(`Invalid duration: ${durationMinutes}`);
-      }
-      
-      console.log('⏰ Calculating times:', { date, startTime, durationMinutes });
-      
-      const startDateTime = new Date(`${date}T${startTime}:00`);
-      const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
-      
-      if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-        throw new Error(`Invalid date/time calculation: ${date}T${startTime}:00`);
-      }
-      
-      dbUpdates.start_time = startDateTime.toISOString();
-      dbUpdates.end_time = endDateTime.toISOString();
-      
-      console.log('✅ Time calculations complete:', {
-        start_time: dbUpdates.start_time,
-        end_time: dbUpdates.end_time
-      });
     }
 
     // Add updated timestamp

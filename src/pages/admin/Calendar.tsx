@@ -45,10 +45,9 @@ interface ClassFormData {
 // Real data state - will be loaded from database
 // (Keeping empty arrays as initial state)
 
-// Duration options
+// Duration options - Only 60 and 120 minutes allowed
 const durationOptions = [
   { value: 60, label: "60 minutes" },
-  { value: 90, label: "90 minutes" },
   { value: 120, label: "120 minutes" },
 ];
 
@@ -82,9 +81,10 @@ const getPracticalSessionPhase = (sessionNumber: number): number => {
 const Calendar = () => {
   const { toast } = useToast();
   
-  // Date and view state
-  const [currentMonth, setCurrentMonth] = useState(new Date(2025, 4, 1)); // Month is 0-indexed, so 4 = May
-  const [selectedDay, setSelectedDay] = useState(new Date(2025, 4, 21)); // May 21, 2025 for day view
+  // Date and view state - Initialize to today's date
+  const today = new Date();
+  const [currentMonth, setCurrentMonth] = useState(today);
+  const [selectedDay, setSelectedDay] = useState(today);
   const [viewMode, setViewMode] = useState("month");
   
   // Data state - Replace mock data arrays with real state management
@@ -260,6 +260,7 @@ const Calendar = () => {
         // Always filter by instructor (no "All Instructors" option)
         if (!selectedInstructorId) {
           console.log('⚠️ No instructor selected, skipping class load');
+          setClasses([]);
           return;
         }
 
@@ -284,11 +285,15 @@ const Calendar = () => {
       }
     };
 
-    // Only load classes if we have instructors loaded (to avoid loading twice)
-    if (!instructorsLoading) {
+    // Only load classes if we have an instructor selected and instructors are loaded
+    if (selectedInstructorId && !instructorsLoading) {
       loadClasses();
+    } else if (!selectedInstructorId && !instructorsLoading) {
+      // Clear classes if no instructor selected
+      setClasses([]);
+      setLoading(false);
     }
-  }, [currentMonth, selectedInstructorId, instructorsLoading]); // Reload when month or instructor changes
+  }, [currentMonth, selectedInstructorId]); // Removed instructorsLoading from dependencies to prevent infinite loop
 
   // Update form instructor when selected instructor changes
   // Note: Removed auto-sync of form instructor with selected tab
@@ -367,8 +372,13 @@ const Calendar = () => {
     console.log('➡️ Navigated to next day:', format(newDay, 'yyyy-MM-dd'));
   };
   
-  // Weekly navigation functions
-  const [currentWeekStart, setCurrentWeekStart] = useState(new Date(2025, 4, 18)); // May 18, 2025
+  // Weekly navigation functions - Initialize to start of current week
+  const getStartOfWeek = (date: Date) => {
+    const day = date.getDay();
+    const diff = date.getDate() - day; // Sunday is 0
+    return new Date(date.setDate(diff));
+  };
+  const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
   const prevWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
   const nextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
   
@@ -1235,20 +1245,32 @@ const Calendar = () => {
                   
                   {/* Class cards */}
                   {dayClasses.map((cls) => {
-                    const { startHour } = getClassPositionData(cls);
+                    const { startHour, duration } = getClassPositionData(cls);
                     const slotIndex = startHour - 8; // 8 is first hour (8:00)
                     const topPosition = slotIndex * 40; // 40px per slot (h-10)
+                    const cardHeight = duration * 40 - 8; // Duration * slot height - padding for visual separation
                     
                     return (
                       <div
                         key={cls.id}
-                        className={`absolute left-1 right-1 ${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"} p-2 rounded-md cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.02] flex items-center h-8`}
+                        className={`absolute left-1 right-1 ${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"} p-2 rounded-md cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.02] flex flex-col justify-center`}
                         style={{ 
                           top: `${topPosition + 4}px`, // 4px offset for centering in 40px slot
+                          height: `${cardHeight}px`, // Dynamic height based on duration
                         }}
                         onClick={() => handleClassClick(cls)}
                       >
-                        <div className="font-medium text-xs truncate">{cls.student}</div>
+                        <div className="font-medium text-xs leading-tight">
+                          {cls.className}
+                        </div>
+                        <div className="text-xs text-opacity-80 leading-tight mt-0.5">
+                          {cls.student}
+                        </div>
+                        {duration > 1 && (
+                          <div className="text-xs text-opacity-60 leading-tight mt-0.5">
+                            {cls.startTime} - {cls.endTime}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
