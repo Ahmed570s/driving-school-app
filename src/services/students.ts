@@ -288,6 +288,8 @@ export const getStudentById = async (studentId: string): Promise<Student | null>
         status,
         current_phase,
         total_hours_completed,
+        theory_hours_completed,
+        practical_hours_completed,
         enrollment_date,
         contract_expiry_date,
         needs_support,

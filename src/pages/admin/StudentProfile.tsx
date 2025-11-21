@@ -48,10 +48,11 @@ import {
   Save,
   X
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { toast } from "@/components/ui/use-toast";
 import { Student, Document } from "@/data/students";
 import { getStudentById, updateStudent, deleteStudent } from "@/services/students";
+import { getClassesByStudent, ClassItem } from "@/services/classes";
 
 // Types
 interface Session {
@@ -69,6 +70,8 @@ interface Session {
 }
 
 // Government curriculum sessions template
+// Total: 27 sessions (12 Theory × 2 hours = 24 hours, 15 Practical × 1 hour = 15 hours)
+// Maximum total hours: 39 hours (24 + 15)
 const sessionTemplate: Session[] = [
   // Phase 1: Prerequisite
   { id: 1, phase: 1, name: "The Vehicle", type: "Theory", completed: true, date: "2024-01-15", timeFrom: "10:00", timeTo: "11:30", instructor: "Mike Brown", notes: "Covered basic vehicle components" },
@@ -133,10 +136,102 @@ const StudentProfile = ({
   const [loading, setLoading] = useState(true);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [classesLoading, setClassesLoading] = useState(false);
   
-  // Load student data from database
+  // Helper function to determine phase from class title
+  const getPhaseFromClassTitle = (title: string, type: string): 1 | 2 | 3 | 4 => {
+    // Phase 1: Theory classes
+    const phase1Titles = ["The Vehicle", "The Driver", "The Environment", "At-Risk Behaviours", "Evaluation"];
+    if (phase1Titles.includes(title)) return 1;
+    
+    // Phase 2: Theory and early practical
+    const phase2Titles = ["Accompanied Driving", "OEA Strategy"];
+    if (phase2Titles.includes(title)) return 2;
+    if (type === "Practical" && title.startsWith("In-Car Session")) {
+      const sessionNum = parseInt(title.match(/\d+/)?.[0] || "0");
+      if (sessionNum >= 1 && sessionNum <= 3) return 2;
+      if (sessionNum >= 4 && sessionNum <= 11) return 3;
+      return 4;
+    }
+    
+    // Phase 3: Theory and mid practical
+    const phase3Titles = ["Speed", "Sharing the Road", "Alcohol and Drugs"];
+    if (phase3Titles.includes(title)) return 3;
+    
+    // Phase 4: Theory and advanced practical
+    const phase4Titles = ["Fatigue and Distractions", "Eco-Driving"];
+    if (phase4Titles.includes(title)) return 4;
+    
+    // Default based on type
+    return type === "Theory" ? 1 : 2;
+  };
+
+  // Convert ClassItem to Session format
+  const convertClassToSession = (classItem: ClassItem, sessionId: number): Session => {
+    // Date is already in 'yyyy-MM-dd' format from ClassItem
+    const date = classItem.date || undefined;
+    const startTime = classItem.startTime || undefined;
+    const endTime = classItem.endTime || undefined;
+    const instructor = classItem.instructor || undefined;
+    const notes = classItem.notes || undefined;
+    const phase = getPhaseFromClassTitle(classItem.className, classItem.type);
+    const completed = classItem.status === 'completed';
+    
+    return {
+      id: sessionId,
+      phase,
+      name: classItem.className,
+      type: classItem.type as "Theory" | "Practical" | "Observation",
+      completed,
+      date,
+      timeFrom: startTime,
+      timeTo: endTime,
+      instructor,
+      notes,
+    };
+  };
+
+  // Merge real classes with session template
+  const mergeClassesWithTemplate = (classes: ClassItem[], template: Session[]): Session[] => {
+    // Create a map of completed classes by title
+    const completedClassesMap = new Map<string, ClassItem>();
+    classes.forEach(cls => {
+      if (cls.status === 'completed' || cls.status === 'scheduled') {
+        const key = cls.className.toLowerCase();
+        // Keep the most recent class if there are duplicates
+        if (!completedClassesMap.has(key) || 
+            (cls.date && completedClassesMap.get(key)?.date && cls.date > completedClassesMap.get(key)!.date)) {
+          completedClassesMap.set(key, cls);
+        }
+      }
+    });
+
+    // Merge template with real classes
+    let sessionId = 1;
+    return template.map(templateSession => {
+      // Try to find a matching class
+      const matchingClass = Array.from(completedClassesMap.values()).find(cls => {
+        const clsTitle = cls.className.toLowerCase();
+        const templateTitle = templateSession.name.toLowerCase();
+        return clsTitle === templateTitle || 
+               (templateSession.name.startsWith("In-Car Session") && 
+                cls.className.startsWith("In-Car Session") &&
+                cls.className.match(/\d+/)?.[0] === templateSession.name.match(/\d+/)?.[0]);
+      });
+
+      if (matchingClass) {
+        const session = convertClassToSession(matchingClass, sessionId++);
+        return session;
+      } else {
+        // Use template session but keep its ID
+        return { ...templateSession, id: sessionId++ };
+      }
+    });
+  };
+
+  // Load student data and classes from database
   React.useEffect(() => {
-    const loadStudent = async () => {
+    const loadStudentData = async () => {
       if (!studentId) {
         setLoading(false);
         return;
@@ -144,8 +239,21 @@ const StudentProfile = ({
 
       try {
         setLoading(true);
-        const studentData = await getStudentById(studentId);
+        setClassesLoading(true);
+        
+        // Load student and classes in parallel
+        const [studentData, studentClasses] = await Promise.all([
+          getStudentById(studentId),
+          getClassesByStudent(studentId)
+        ]);
+        
         setStudent(studentData);
+        
+        // Merge real classes with template
+        const mergedSessions = mergeClassesWithTemplate(studentClasses, sessionTemplate);
+        setSessions(mergedSessions);
+        
+        console.log(`✅ Loaded student with ${studentClasses.length} classes, merged into ${mergedSessions.length} sessions`);
         
         // Initialize edit mode if needed
         if (initialEditMode && studentData && !editedStudent) {
@@ -160,10 +268,11 @@ const StudentProfile = ({
         });
       } finally {
         setLoading(false);
+        setClassesLoading(false);
       }
     };
 
-    loadStudent();
+    loadStudentData();
   }, [studentId, initialEditMode]);
 
   // Initialize editedStudent when entering edit mode
@@ -173,12 +282,26 @@ const StudentProfile = ({
     }
   }, [initialEditMode, student, editedStudent]);
 
-  // Calculate progress (must be before early returns to maintain hook order)
+  // Calculate progress based on hours completed
+  // Total required: 39 hours (24 theory + 15 practical)
+  // Theory: 12 classes × 2 hours = 24 hours max
+  // Practical: 15 classes × 1 hour = 15 hours max
+  // Note: total_hours_completed in database = theory_hours_completed + practical_hours_completed
+  const TOTAL_REQUIRED_HOURS = 39;
   const completedSessions = sessions.filter(s => s.completed).length;
-  const progressPercentage = Math.round((completedSessions / sessions.length) * 100);
+  // totalCompletedSessions maps to total_hours_completed from database
+  // which is the sum of theory_hours_completed + practical_hours_completed
+  const hoursCompleted = student?.totalCompletedSessions || 0;
+  const progressPercentage = Math.min(Math.round((hoursCompleted / TOTAL_REQUIRED_HOURS) * 100), 100);
   
-  // Auto-calculate current phase based on completed sessions
+  // Auto-calculate current phase based on student's current phase or completed sessions
   const calculateCurrentPhase = (): 1 | 2 | 3 | 4 => {
+    // Use student's current phase if available
+    if (student?.currentPhase) {
+      return student.currentPhase as 1 | 2 | 3 | 4;
+    }
+    
+    // Fallback to calculating from completed sessions
     const phase1Complete = sessions.slice(0, 5).every(s => s.completed);
     const phase2Complete = sessions.slice(5, 11).every(s => s.completed);
     const phase3Complete = sessions.slice(11, 20).every(s => s.completed);
@@ -385,10 +508,10 @@ const StudentProfile = ({
             <Trash2 className="mr-2 h-4 w-4" />
             Delete Student
           </Button>
-          <Button variant="outline" onClick={onBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Students
-          </Button>
+        <Button variant="outline" onClick={onBack}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Students
+        </Button>
         </div>
       </div>
 
@@ -755,6 +878,10 @@ const StudentProfile = ({
                       <Badge className={getPhaseColor(calculateCurrentPhase())} variant="outline">
                         Phase {calculateCurrentPhase()}
                       </Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs">Hours Completed</span>
+                      <span className="text-xs font-medium">{hoursCompleted} / {TOTAL_REQUIRED_HOURS} hrs</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs">Sessions</span>
