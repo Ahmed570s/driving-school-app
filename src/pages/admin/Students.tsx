@@ -55,7 +55,7 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
   const [loading, setLoading] = useState(true);
   
   // 🔄 REAL DATABASE FUNCTION - Load students from database
-  const loadStudents = async () => {
+  const loadStudents = async (showToast: boolean = false) => {
     try {
       setLoading(true);
       console.log('🔄 Loading students from database...');
@@ -63,15 +63,18 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
       console.log('✅ Loaded students:', realStudents);
       setStudents(realStudents);
       
-      toast({
-        title: "Students Loaded Successfully! 🎉",
-        description: `Found ${realStudents.length} students`,
-      });
+      // Only show toast on manual refresh or initial load
+      if (showToast) {
+        toast({
+          title: "Students Loaded Successfully! 🎉",
+          description: `Found ${realStudents.length} students`,
+        });
+      }
     } catch (error) {
       console.error('❌ Failed to load students:', error);
       toast({
         title: "Failed to Load Students",
-        description: "Check console for details",
+        description: error instanceof Error ? error.message : "Check console for details",
         variant: "destructive"
       });
       // Fallback to empty array on error
@@ -81,9 +84,42 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
     }
   };
 
-  // Load students when component mounts
+  // Load students when component mounts (only once, no toast)
   useEffect(() => {
-    loadStudents();
+    let isMounted = true;
+    
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        console.log('🔄 Loading students from database...');
+        const realStudents = await getStudents();
+        console.log('✅ Loaded students:', realStudents);
+        
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setStudents(realStudents);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('❌ Failed to load students:', error);
+        if (isMounted) {
+          toast({
+            title: "Failed to Load Students",
+            description: error instanceof Error ? error.message : "Check console for details",
+            variant: "destructive"
+          });
+          setStudents([]);
+          setLoading(false);
+        }
+      }
+    };
+    
+    fetchData();
+    
+    // Cleanup function to prevent state updates if component unmounts
+    return () => {
+      isMounted = false;
+    };
   }, []);
   
   // Apply filters and search
@@ -245,7 +281,7 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Students</h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={loadStudents} disabled={loading}>
+          <Button variant="outline" onClick={() => loadStudents(true)} disabled={loading}>
             🔄 Refresh
           </Button>
           <Button onClick={handleAddStudent}>

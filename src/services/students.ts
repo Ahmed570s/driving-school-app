@@ -79,14 +79,21 @@ const convertToBasicStudent = (dbStudent: DatabaseStudent): BasicStudent => {
   // Extract group information from student_groups join
   let groupName: string | null = null;
   if (dbStudent.student_groups) {
-    const studentGroups = Array.isArray(dbStudent.student_groups) 
-      ? dbStudent.student_groups 
-      : [dbStudent.student_groups];
-    
-    // Find the active group enrollment
-    const activeGroup = studentGroups.find(sg => sg.status === 'active' && sg.groups);
-    if (activeGroup && activeGroup.groups) {
-      groupName = activeGroup.groups.name;
+    try {
+      const studentGroups = Array.isArray(dbStudent.student_groups) 
+        ? dbStudent.student_groups 
+        : [dbStudent.student_groups];
+      
+      // Filter out null/undefined entries and find the active group enrollment
+      const validGroups = studentGroups.filter(sg => sg && sg.status);
+      const activeGroup = validGroups.find(sg => sg.status === 'active' && sg.groups);
+      
+      if (activeGroup && activeGroup.groups && activeGroup.groups.name) {
+        groupName = activeGroup.groups.name;
+      }
+    } catch (error) {
+      console.warn('⚠️ Error extracting group for student:', dbStudent.id, error);
+      // Continue with groupName = null
     }
   }
   
