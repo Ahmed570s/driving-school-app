@@ -6,7 +6,7 @@ import { BasicStudent, Student } from '@/data/students';
 // TYPES - What data looks like coming from the database
 // ============================================================================
 
-// This is what Supabase returns when we join profiles + students tables
+// This is what Supabase returns when we join profiles + students + groups tables
 interface DatabaseStudent {
   // From students table
   id: string;
@@ -28,11 +28,43 @@ interface DatabaseStudent {
     email: string;
     phone: string;
   } | null;
+  // From student_groups -> groups (joined) - can be array or single object
+  student_groups?: {
+    status: string;
+    groups: {
+      id: string;
+      name: string;
+    } | null;
+  }[] | {
+    status: string;
+    groups: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
 }
 
 // ============================================================================
 // HELPER FUNCTIONS - Convert database format to UI format
 // ============================================================================
+
+/**
+ * Extracts group letter from group name (e.g., "Group A" -> "A", "Group B" -> "B")
+ */
+const extractGroupLetter = (groupName: string | null | undefined): "A" | "B" | "C" | "D" | "none" => {
+  if (!groupName) return "none";
+  
+  // Extract letter from group name (e.g., "Group A" -> "A")
+  const match = groupName.match(/\b([A-D])\b/i);
+  if (match && match[1]) {
+    const letter = match[1].toUpperCase();
+    if (['A', 'B', 'C', 'D'].includes(letter)) {
+      return letter as "A" | "B" | "C" | "D";
+    }
+  }
+  
+  return "none";
+};
 
 /**
  * Converts database student to BasicStudent format for the UI
@@ -44,6 +76,20 @@ const convertToBasicStudent = (dbStudent: DatabaseStudent): BasicStudent => {
     ? dbStudent.profiles[0] 
     : dbStudent.profiles;
   
+  // Extract group information from student_groups join
+  let groupName: string | null = null;
+  if (dbStudent.student_groups) {
+    const studentGroups = Array.isArray(dbStudent.student_groups) 
+      ? dbStudent.student_groups 
+      : [dbStudent.student_groups];
+    
+    // Find the active group enrollment
+    const activeGroup = studentGroups.find(sg => sg.status === 'active' && sg.groups);
+    if (activeGroup && activeGroup.groups) {
+      groupName = activeGroup.groups.name;
+    }
+  }
+  
   // Safety check - if no profile found, use fallback values
   if (!profile) {
     console.warn('⚠️ No profile found for student:', dbStudent.id);
@@ -53,7 +99,7 @@ const convertToBasicStudent = (dbStudent: DatabaseStudent): BasicStudent => {
       studentId: dbStudent.student_id,
       email: 'no-email@example.com',
       phone: 'No phone',
-      group: "A",
+      group: extractGroupLetter(groupName),
       hoursDone: dbStudent.total_hours_completed,
       currentPhase: dbStudent.current_phase || 1,
       status: dbStudent.status === 'on_hold' ? 'on-hold' : dbStudent.status as any,
@@ -73,7 +119,7 @@ const convertToBasicStudent = (dbStudent: DatabaseStudent): BasicStudent => {
     studentId: dbStudent.student_id,
     email: profile.email,
     phone: profile.phone,
-    group: "A", // TODO: Get real group from database later
+    group: extractGroupLetter(groupName),
     hoursDone: dbStudent.total_hours_completed,
     currentPhase: dbStudent.current_phase,
     status: convertStatus(dbStudent.status),
@@ -164,7 +210,8 @@ export const getStudents = async (): Promise<BasicStudent[]> => {
   try {
     console.log('🔍 Fetching students from database...');
     
-    // Query Supabase: Get students and join with profiles using explicit foreign key
+    // Query Supabase: Get students and join with profiles, student_groups, and groups
+    // Using left join (!) instead of inner join (!inner) so students without groups are included
     const { data, error } = await supabase
       .from('students')
       .select(`
@@ -180,6 +227,13 @@ export const getStudents = async (): Promise<BasicStudent[]> => {
           last_name,
           email,
           phone
+        ),
+        student_groups (
+          status,
+          groups (
+            id,
+            name
+          )
         )
       `);
 
