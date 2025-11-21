@@ -9,6 +9,7 @@ export interface BasicStudent {
   phone: string;
   group: "A" | "B" | "C" | "D" | "none";
   hoursDone: number;
+  currentPhase: number; // Added for scheduling and phase-based filtering
   status: "active" | "on-hold" | "completed" | "dropped";
   hasBalance: boolean;
   hasMissingClasses: boolean;

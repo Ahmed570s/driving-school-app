@@ -24,23 +24,10 @@ import { getStudentsForScheduling, getStudentsByGroup, getAvailableStudentsForCl
 import { useToast } from "@/hooks/use-toast";
 
 // Import types from services
-import type { ClassItem } from "@/services/classes";
+import type { ClassItem, ClassFormData } from "@/services/classes";
 import type { Instructor, InstructorOption } from "@/services/instructors";
 import type { Group, GroupOption } from "@/services/groups";
 import type { StudentOption } from "@/services/students";
-
-// Define form data interface (matches service layer)
-interface ClassFormData {
-  type: "Theory" | "Practical" | "";
-  date: string;
-  startTime: string;
-  duration: number;
-  instructor: string;
-  selectedStudents: string[];
-  selectedGroup: string;
-  notes: string;
-  title: string;
-}
 
 // Real data state - will be loaded from database
 // (Keeping empty arrays as initial state)
@@ -121,6 +108,8 @@ const Calendar = () => {
     selectedGroup: "",
     notes: "",
     title: "",
+    location: "",
+    cost: undefined,
   });
   
   // Delete confirmation state
@@ -141,6 +130,8 @@ const Calendar = () => {
     selectedGroup: "",
     notes: "",
     title: "",
+    location: "Main Campus", // Default location
+    cost: undefined, // Optional cost
   });
   
   // ============================================================================
@@ -341,7 +332,7 @@ const Calendar = () => {
   // ============================================================================
   // CALENDAR CALCULATIONS
   // ============================================================================
-
+  
   // Get days for current month
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -522,7 +513,7 @@ const Calendar = () => {
 
     return errors;
   };
-
+  
   // Handle form submission
   const handleSubmit = async () => {
     try {
@@ -536,9 +527,9 @@ const Calendar = () => {
           description: validationErrors.join(". "),
           variant: "destructive",
         });
-        return;
-      }
-
+      return;
+    }
+    
       // Check for instructor conflicts
       const conflictingClass = checkInstructorConflict();
       if (conflictingClass) {
@@ -547,30 +538,18 @@ const Calendar = () => {
           description: `The instructor already has a class at ${formData.startTime} on this date.`,
           variant: "destructive",
         });
-        return;
-      }
+      return;
+    }
       
       console.log('📝 Creating new class...', formData);
       
-      // Prepare class data for creation (with default values for removed fields)
-      const classData = {
-        type: formData.type,
-        date: formData.date,
-        startTime: formData.startTime,
-        duration: formData.duration,
-        instructor: formData.instructor,
-        selectedStudents: formData.selectedStudents,
-        selectedGroup: formData.selectedGroup,
-        notes: formData.notes,
-        title: formData.title, // Use the selected title from dropdown
-        location: "Main Campus", // Default location
-        cost: undefined, // No cost by default
-      };
+      // Prepare class data for creation - formData already matches ClassFormData interface
+      const classData = formData;
       
       // Create the class
       const newClass = await createClass(classData);
-      
-      // Show success message
+    
+    // Show success message
       toast({
         title: "Class Created Successfully",
         description: `${newClass.type} class scheduled for ${format(new Date(formData.date), 'MMM d, yyyy')} at ${formData.startTime}.`,
@@ -584,8 +563,8 @@ const Calendar = () => {
       
       // Refresh classes data (will load classes for the correct instructor)
       await refreshClasses();
-      
-      // Reset form and close modal
+    
+    // Reset form and close modal
       resetForm();
       setModalOpen(false);
       
@@ -613,6 +592,8 @@ const Calendar = () => {
       selectedGroup: "",
       notes: "",
       title: "",
+      location: "Main Campus",
+      cost: undefined,
     });
   };
 
@@ -887,6 +868,8 @@ const Calendar = () => {
       selectedGroup: selectedClass.groupId || "",
       notes: selectedClass.notes,
       title: selectedClass.className,
+      location: selectedClass.location || "Main Campus",
+      cost: selectedClass.cost || undefined,
     });
     
     console.log('📝 Edit form populated with data:', {
@@ -914,6 +897,8 @@ const Calendar = () => {
       selectedGroup: "",
       notes: "",
       title: "",
+      location: "",
+      cost: undefined,
     });
   };
 
@@ -1260,16 +1245,26 @@ const Calendar = () => {
                         }}
                         onClick={() => handleClassClick(cls)}
                       >
-                        <div className="font-medium text-xs leading-tight">
-                          {cls.className}
-                        </div>
-                        <div className="text-xs text-opacity-80 leading-tight mt-0.5">
-                          {cls.student}
-                        </div>
-                        {duration > 1 && (
-                          <div className="text-xs text-opacity-60 leading-tight mt-0.5">
-                            {cls.startTime} - {cls.endTime}
+                        {cls.type === "Practical" ? (
+                          // Practical classes: Show only student name
+                          <div className="font-medium text-xs leading-tight text-center">
+                            {cls.student}
                           </div>
+                        ) : (
+                          // Theory classes: Show class name, student/group, and time range for long classes
+                          <>
+                            <div className="font-medium text-xs leading-tight">
+                              {cls.className}
+                            </div>
+                            <div className="text-xs text-opacity-80 leading-tight mt-0.5">
+                              {cls.student}
+                            </div>
+                            {duration > 1 && (
+                              <div className="text-xs text-opacity-60 leading-tight mt-0.5">
+                                {cls.startTime} - {cls.endTime}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     );
@@ -1493,7 +1488,7 @@ const Calendar = () => {
     <PageLayout>
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold">Calendar</h1>
+        <h1 className="text-3xl font-bold">Calendar</h1>
           {(loading || instructorsLoading || groupsLoading || studentsLoading) && (
             <div className="flex items-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1514,10 +1509,10 @@ const Calendar = () => {
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button onClick={() => setModalOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" />
-            Create Class
-          </Button>
+        <Button onClick={() => setModalOpen(true)}>
+          <Plus className="mr-1 h-4 w-4" />
+          Create Class
+        </Button>
         </div>
       </div>
 
@@ -1616,7 +1611,7 @@ const Calendar = () => {
                       instructorOptions.map((instructor) => (
                         <SelectItem key={instructor.id} value={instructor.id}>
                           {instructor.name}
-                        </SelectItem>
+                      </SelectItem>
                       ))
                     )}
                   </SelectContent>
@@ -1660,11 +1655,8 @@ const Calendar = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="30">30 minutes</SelectItem>
                     <SelectItem value="60">60 minutes</SelectItem>
-                    <SelectItem value="90">90 minutes</SelectItem>
                     <SelectItem value="120">120 minutes</SelectItem>
-                    <SelectItem value="180">180 minutes</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1674,63 +1666,63 @@ const Calendar = () => {
             {formData.type && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-2">
-                    {formData.type === "Theory" ? (
-                      // Theory: Show Group Dropdown
-                      <>
+              <div className="space-y-2">
+                {formData.type === "Theory" ? (
+                  // Theory: Show Group Dropdown
+                  <>
                         <Label htmlFor="group">Select Group *</Label>
-                        <Select 
-                          value={formData.selectedGroup} 
-                          onValueChange={(value) => handleFormChange('selectedGroup', value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a group for theory class" />
-                          </SelectTrigger>
-                          <SelectContent>
+                    <Select 
+                      value={formData.selectedGroup} 
+                      onValueChange={(value) => handleFormChange('selectedGroup', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a group for theory class" />
+                      </SelectTrigger>
+                      <SelectContent>
                             {groupsLoading ? (
                               <SelectItem value="" disabled>Loading groups...</SelectItem>
                             ) : groupOptions.length === 0 ? (
                               <SelectItem value="" disabled>No groups available</SelectItem>
                             ) : (
                               groupOptions.map((group) => (
-                                <SelectItem key={group.id} value={group.id}>
+                          <SelectItem key={group.id} value={group.id}>
                                   {group.name} ({group.currentEnrollment} students)
-                                </SelectItem>
+                          </SelectItem>
                               ))
                             )}
-                          </SelectContent>
-                        </Select>
-                      </>
-                    ) : (
-                      // Practical: Show Single Student Dropdown with Search
-                      <>
+                      </SelectContent>
+                    </Select>
+                  </>
+                ) : (
+                  // Practical: Show Single Student Dropdown with Search
+                  <>
                         <Label htmlFor="student">Select Student *</Label>
-                        <Popover open={studentComboboxOpen} onOpenChange={setStudentComboboxOpen}>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              aria-expanded={studentComboboxOpen}
-                              className="w-full justify-between"
-                            >
-                              {formData.selectedStudents[0] 
+                    <Popover open={studentComboboxOpen} onOpenChange={setStudentComboboxOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={studentComboboxOpen}
+                          className="w-full justify-between"
+                        >
+                          {formData.selectedStudents[0] 
                                 ? students.find(student => student.name === formData.selectedStudents[0])?.name + 
                                   ` (${students.find(student => student.name === formData.selectedStudents[0])?.studentId})`
                                 : studentsLoading 
                                   ? "Loading students..."
                                   : students.length === 0
                                     ? "No students available"
-                                    : "Select a student for practical class..."
-                              }
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[400px] p-0">
-                            <Command>
-                              <CommandInput placeholder="Search students..." />
-                              <CommandList>
-                                <CommandEmpty>No student found.</CommandEmpty>
-                                <CommandGroup>
+                            : "Select a student for practical class..."
+                          }
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0">
+                        <Command>
+                          <CommandInput placeholder="Search students..." />
+                          <CommandList>
+                            <CommandEmpty>No student found.</CommandEmpty>
+                            <CommandGroup>
                                   {studentsLoading ? (
                                     <CommandItem disabled>
                                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1753,33 +1745,33 @@ const Calendar = () => {
                                       }
                                       
                                       return availableStudents.map((student) => (
-                                        <CommandItem
-                                          key={student.id}
-                                          value={student.name}
-                                          onSelect={(currentValue) => {
-                                            const newValue = currentValue === formData.selectedStudents[0] ? [] : [currentValue];
-                                            handleFormChange('selectedStudents', newValue);
-                                            setStudentComboboxOpen(false);
-                                          }}
-                                        >
-                                          <Check
-                                            className={cn(
-                                              "mr-2 h-4 w-4",
-                                              formData.selectedStudents[0] === student.name ? "opacity-100" : "opacity-0"
-                                            )}
-                                          />
+                                <CommandItem
+                                  key={student.id}
+                                  value={student.name}
+                                  onSelect={(currentValue) => {
+                                    const newValue = currentValue === formData.selectedStudents[0] ? [] : [currentValue];
+                                    handleFormChange('selectedStudents', newValue);
+                                    setStudentComboboxOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      formData.selectedStudents[0] === student.name ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
                                           {student.name} ({student.studentId}) - Phase {student.currentPhase}
-                                        </CommandItem>
+                                </CommandItem>
                                       ));
                                     })()
                                   )}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      </>
-                    )}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </>
+                )}
                   </div>
                 </div>
               </div>
@@ -1836,7 +1828,7 @@ const Calendar = () => {
               ) : (
                 <>
                   <Plus className="mr-2 h-4 w-4" />
-                  Create Class
+              Create Class
                 </>
               )}
             </Button>
@@ -1854,7 +1846,7 @@ const Calendar = () => {
             >
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
                 <div className="flex items-center gap-4">
-                  <TabsList>
+                <TabsList>
                     {instructorsLoading ? (
                       <TabsTrigger value="" disabled>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1869,7 +1861,7 @@ const Calendar = () => {
                         </TabsTrigger>
                       ))
                     )}
-                  </TabsList>
+                </TabsList>
                   
                   {/* Classes count indicator */}
                   {!loading && selectedInstructorId && (
@@ -1905,7 +1897,7 @@ const Calendar = () => {
                 </div>
               ) : (
                 viewMode === "month" ? renderMonthView() : 
-                viewMode === "week" ? renderWeekView() : 
+               viewMode === "week" ? renderWeekView() : 
                 renderDayView()
               )}
             </Tabs>
@@ -2028,11 +2020,8 @@ const Calendar = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="30">30 minutes</SelectItem>
                           <SelectItem value="60">60 minutes</SelectItem>
-                          <SelectItem value="90">90 minutes</SelectItem>
                           <SelectItem value="120">120 minutes</SelectItem>
-                          <SelectItem value="180">180 minutes</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -2138,62 +2127,62 @@ const Calendar = () => {
                   // View Mode - Class Details
                   <>
                     <div className="space-y-4">
-                      <div className="flex items-start space-x-3">
-                        <UserRound className="h-5 w-5 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium">Student</p>
-                          <p className="text-sm text-muted-foreground">{selectedClass.student}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-3">
-                        <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium">Group</p>
-                          <p className="text-sm text-muted-foreground">{selectedClass.group}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-3">
-                        <UserRound className="h-5 w-5 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium">Instructor</p>
-                          <p className="text-sm text-muted-foreground">{selectedClass.instructor}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-3">
-                        <CalendarIcon className="h-5 w-5 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium">Date & Time</p>
-                          <p className="text-sm text-muted-foreground">
-                            {format(new Date(selectedClass.date), 'MMMM d, yyyy')} • {selectedClass.startTime} - {selectedClass.endTime}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-3">
-                        <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium">Duration</p>
-                          <p className="text-sm text-muted-foreground">{selectedClass.duration}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-3">
-                        <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
-                        <div>
+                <div className="flex items-start space-x-3">
+                  <UserRound className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Student</p>
+                    <p className="text-sm text-muted-foreground">{selectedClass.student}</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Group</p>
+                    <p className="text-sm text-muted-foreground">{selectedClass.group}</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <UserRound className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Instructor</p>
+                    <p className="text-sm text-muted-foreground">{selectedClass.instructor}</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <CalendarIcon className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Date & Time</p>
+                    <p className="text-sm text-muted-foreground">
+                      {format(new Date(selectedClass.date), 'MMMM d, yyyy')} • {selectedClass.startTime} - {selectedClass.endTime}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Duration</p>
+                    <p className="text-sm text-muted-foreground">{selectedClass.duration}</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
                           <p className="text-sm font-medium">Location</p>
                           <p className="text-sm text-muted-foreground">{selectedClass.location || "TBD"}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-3">
-                        <Bookmark className="h-5 w-5 text-muted-foreground mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium">Notes</p>
-                          <p className="text-sm text-muted-foreground">{selectedClass.notes}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-6">
-                      <SheetClose asChild>
-                        <Button className="w-full">Close</Button>
-                      </SheetClose>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <Bookmark className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Notes</p>
+                    <p className="text-sm text-muted-foreground">{selectedClass.notes}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-6">
+                <SheetClose asChild>
+                  <Button className="w-full">Close</Button>
+                </SheetClose>
                     </div>
                   </>
                 )}

@@ -175,6 +175,8 @@ const convertToClassItem = (dbClass: DatabaseClass): ClassItem => {
  * Converts form data to database format for creating/updating classes
  */
 const convertToDatabase = (formData: ClassFormData) => {
+  console.log('🔄 Converting form data to database format:', formData);
+  
   // Calculate end time based on start time and duration
   const startDateTime = new Date(`${formData.date}T${formData.startTime}:00`);
   const endDateTime = new Date(startDateTime.getTime() + formData.duration * 60000);
@@ -182,7 +184,9 @@ const convertToDatabase = (formData: ClassFormData) => {
   // Determine if it's a theory or practical class
   const isTheoryClass = formData.type === 'Theory';
   
-  return {
+  // For practical classes, selectedStudents contains student names, not IDs
+  // We need to handle this in the createClass function instead
+  const dbData = {
     title: formData.title || `${formData.type} Class`,
     description: formData.notes || null,
     class_type: formData.type.toLowerCase() as 'theory' | 'practical',
@@ -190,12 +194,15 @@ const convertToDatabase = (formData: ClassFormData) => {
     start_time: startDateTime.toISOString(),
     end_time: endDateTime.toISOString(),
     instructor_id: formData.instructor,
-    student_id: isTheoryClass ? null : (formData.selectedStudents[0] || null),
-    group_id: isTheoryClass ? formData.selectedGroup : null,
+    student_id: isTheoryClass ? null : null, // Will be set in createClass
+    group_id: isTheoryClass ? (formData.selectedGroup || null) : null,
     location: formData.location || null,
     notes: formData.notes || null,
     cost: formData.cost || null
   };
+  
+  console.log('✅ Converted to database format:', dbData);
+  return dbData;
 };
 
 // ============================================================================
@@ -359,6 +366,36 @@ export const createClass = async (classData: ClassFormData): Promise<ClassItem> 
 
     // Convert form data to database format
     const dbData = convertToDatabase(classData);
+    
+    // For practical classes, we need to convert student name to student ID
+    if (classData.type === 'Practical' && classData.selectedStudents.length > 0) {
+      const studentName = classData.selectedStudents[0];
+      console.log('🔍 Looking up student ID for:', studentName);
+      
+      // Query to find student by name
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .select(`
+          id,
+          profiles!inner (
+            first_name,
+            last_name
+          )
+        `)
+        .eq('profiles.first_name', studentName.split(' ')[0])
+        .eq('profiles.last_name', studentName.split(' ')[1])
+        .single();
+      
+      if (studentError || !studentData) {
+        console.error('❌ Error finding student:', studentError);
+        throw new Error(`Student "${studentName}" not found`);
+      }
+      
+      dbData.student_id = studentData.id;
+      console.log('✅ Found student ID:', studentData.id);
+    }
+
+    console.log('📝 Final database data:', dbData);
 
     const { data, error } = await supabase
       .from('classes')
@@ -395,7 +432,7 @@ export const createClass = async (classData: ClassFormData): Promise<ClassItem> 
 
     if (error) {
       console.error('❌ Error creating class:', error);
-      throw new Error('Failed to create class in database');
+      throw new Error(`Failed to create class in database: ${error.message}`);
     }
 
     if (!data) {

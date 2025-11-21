@@ -55,6 +55,7 @@ const convertToBasicStudent = (dbStudent: DatabaseStudent): BasicStudent => {
       phone: 'No phone',
       group: "A",
       hoursDone: dbStudent.total_hours_completed,
+      currentPhase: dbStudent.current_phase || 1,
       status: dbStudent.status === 'on_hold' ? 'on-hold' : dbStudent.status as any,
       hasBalance: dbStudent.has_balance,
       hasMissingClasses: dbStudent.has_missing_classes
@@ -74,6 +75,7 @@ const convertToBasicStudent = (dbStudent: DatabaseStudent): BasicStudent => {
     phone: profile.phone,
     group: "A", // TODO: Get real group from database later
     hoursDone: dbStudent.total_hours_completed,
+    currentPhase: dbStudent.current_phase,
     status: convertStatus(dbStudent.status),
     hasBalance: dbStudent.has_balance,
     hasMissingClasses: dbStudent.has_missing_classes
@@ -633,7 +635,7 @@ export const getStudentsForScheduling = async (): Promise<StudentOption[]> => {
     
     return activeStudents.map(student => ({
       id: student.id,
-      name: `${student.firstName} ${student.lastName}`,
+      name: student.name, // BasicStudent already has the full name
       studentId: student.studentId,
       email: student.email,
       phone: student.phone,
@@ -798,7 +800,7 @@ export const getStudentStats = async (): Promise<{
     const completedStudents = allStudents.filter(student => student.status === 'completed');
     const droppedStudents = allStudents.filter(student => student.status === 'dropped');
     
-    const totalHours = allStudents.reduce((sum, student) => sum + student.totalHours, 0);
+    const totalHours = allStudents.reduce((sum, student) => sum + student.hoursDone, 0);
     const totalPhases = allStudents.reduce((sum, student) => sum + student.currentPhase, 0);
     
     const averageHours = allStudents.length > 0 
