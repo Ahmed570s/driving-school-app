@@ -79,6 +79,11 @@ export interface ClassItem {
   location: string;
   cost: number | null;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
+  attendanceStatus?: string;
+  attendanceNotes?: string;
+  attendanceInstructorFeedback?: string;
+  attendanceSignedAt?: string | null;
+  attendanceRecordId?: string;
 }
 
 // Form data format for creating/editing classes
@@ -653,7 +658,90 @@ export const getClassesByInstructor = async (instructorId: string, date?: string
  * Get classes for a specific student
  */
 export const getClassesByStudent = async (studentId: string): Promise<ClassItem[]> => {
-  return getClasses({ studentId });
+  try {
+    const [directClasses, attendanceResponse] = await Promise.all([
+      getClasses({ studentId }),
+      supabase
+        .from('class_attendances')
+        .select(`
+          id,
+          status,
+          completion_notes,
+          instructor_feedback,
+          signed_at,
+          class_id,
+          classes (
+            *,
+            instructors!inner (
+              id,
+              employee_id,
+              profiles!inner (
+                first_name,
+                last_name,
+                email,
+                phone
+              )
+            ),
+            students (
+              id,
+              student_id,
+              profiles (
+                first_name,
+                last_name,
+                email,
+                phone
+              )
+            ),
+            groups (
+              id,
+              name,
+              description
+            )
+          )
+        `)
+        .eq('student_id', studentId)
+    ]);
+
+    if (attendanceResponse.error) {
+      console.error('❌ Error fetching class attendance:', attendanceResponse.error);
+      throw new Error('Failed to fetch class attendance records');
+    }
+
+    const attendanceRecords = attendanceResponse.data || [];
+    const classesMap = new Map<string, ClassItem>();
+
+    directClasses.forEach(cls => {
+      classesMap.set(cls.id, {
+        ...cls,
+        attendanceStatus: cls.status,
+      });
+    });
+
+    attendanceRecords.forEach(record => {
+      if (!record.classes) return;
+      const classItem = convertToClassItem(record.classes as DatabaseClass);
+      classesMap.set(classItem.id, {
+        ...classItem,
+        attendanceStatus: record.status,
+        attendanceNotes: record.completion_notes || undefined,
+        attendanceInstructorFeedback: record.instructor_feedback || undefined,
+        attendanceSignedAt: record.signed_at || undefined,
+        attendanceRecordId: record.id,
+      });
+    });
+
+    return Array.from(classesMap.values()).sort((a, b) => {
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      if (dateA === dateB) {
+        return (a.startTime || '').localeCompare(b.startTime || '');
+      }
+      return dateA.localeCompare(dateB);
+    });
+  } catch (error) {
+    console.error('💥 Error in getClassesByStudent:', error);
+    throw error;
+  }
 };
 
 /**

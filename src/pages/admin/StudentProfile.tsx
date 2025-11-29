@@ -67,25 +67,28 @@ interface Session {
   instructor?: string;
   notes?: string;
   instructorComments?: string;
+  classId?: string;
+  attendanceStatus?: string;
+  attendanceSignedAt?: string | null;
 }
 
 // Government curriculum sessions template
 // Total: 27 sessions (12 Theory × 2 hours = 24 hours, 15 Practical × 1 hour = 15 hours)
 // Maximum total hours: 39 hours (24 + 15)
 const sessionTemplate: Session[] = [
-  // Phase 1: Prerequisite
-  { id: 1, phase: 1, name: "The Vehicle", type: "Theory", completed: true, date: "2024-01-15", timeFrom: "10:00", timeTo: "11:30", instructor: "Mike Brown", notes: "Covered basic vehicle components" },
-  { id: 2, phase: 1, name: "The Driver", type: "Theory", completed: true, date: "2024-01-17", timeFrom: "10:00", timeTo: "11:30", instructor: "Mike Brown", notes: "Driver responsibilities and requirements" },
-  { id: 3, phase: 1, name: "The Environment", type: "Theory", completed: true, date: "2024-01-19", timeFrom: "10:00", timeTo: "11:30", instructor: "Lisa Taylor", notes: "Road conditions and weather factors" },
-  { id: 4, phase: 1, name: "At-Risk Behaviours", type: "Theory", completed: true, date: "2024-01-22", timeFrom: "10:00", timeTo: "11:30", instructor: "Lisa Taylor", notes: "Risk awareness and prevention" },
-  { id: 5, phase: 1, name: "Evaluation", type: "Theory", completed: true, date: "2024-01-24", timeFrom: "10:00", timeTo: "11:30", instructor: "Mike Brown", notes: "Phase 1 assessment completed" },
+  // Phase 1: Prerequisite (Theory only)
+  { id: 1, phase: 1, name: "The Vehicle", type: "Theory", completed: false },
+  { id: 2, phase: 1, name: "The Driver", type: "Theory", completed: false },
+  { id: 3, phase: 1, name: "The Environment", type: "Theory", completed: false },
+  { id: 4, phase: 1, name: "At-Risk Behaviours", type: "Theory", completed: false },
+  { id: 5, phase: 1, name: "Evaluation", type: "Theory", completed: false },
   
   // Phase 2: Guided Driving
-  { id: 6, phase: 2, name: "Accompanied Driving", type: "Theory", completed: true, date: "2024-01-26", timeFrom: "10:00", timeTo: "11:30", instructor: "Lisa Taylor", notes: "Preparation for practical sessions" },
-  { id: 7, phase: 2, name: "In-Car Session 1", type: "Practical", completed: true, date: "2024-01-29", timeFrom: "14:00", timeTo: "15:30", instructor: "James Wilson", notes: "First practical lesson - basic controls" },
-  { id: 8, phase: 2, name: "In-Car Session 2", type: "Practical", completed: true, date: "2024-02-01", timeFrom: "14:00", timeTo: "15:30", instructor: "James Wilson", notes: "Steering and basic maneuvers" },
-  { id: 9, phase: 2, name: "OEA Strategy", type: "Theory", completed: true, date: "2024-02-03", timeFrom: "10:00", timeTo: "11:30", instructor: "Mike Brown", notes: "Observe, Evaluate, Act methodology" },
-  { id: 10, phase: 2, name: "In-Car Session 3", type: "Practical", completed: true, date: "2024-02-05", timeFrom: "14:00", timeTo: "15:30", instructor: "James Wilson", notes: "Traffic integration practice" },
+  { id: 6, phase: 2, name: "Accompanied Driving", type: "Theory", completed: false },
+  { id: 7, phase: 2, name: "In-Car Session 1", type: "Practical", completed: false },
+  { id: 8, phase: 2, name: "In-Car Session 2", type: "Practical", completed: false },
+  { id: 9, phase: 2, name: "OEA Strategy", type: "Theory", completed: false },
+  { id: 10, phase: 2, name: "In-Car Session 3", type: "Practical", completed: false },
   { id: 11, phase: 2, name: "In-Car Session 4", type: "Practical", completed: false },
   
   // Phase 3: Semi-Guided Driving
@@ -103,10 +106,10 @@ const sessionTemplate: Session[] = [
   { id: 21, phase: 4, name: "Fatigue and Distractions", type: "Theory", completed: false },
   { id: 22, phase: 4, name: "In-Car Session 11", type: "Practical", completed: false },
   { id: 23, phase: 4, name: "In-Car Session 12", type: "Practical", completed: false },
-  { id: 24, phase: 4, name: "In-Car Session 13", type: "Practical", completed: false },
-  { id: 25, phase: 4, name: "Eco-Driving", type: "Theory", completed: false },
+  { id: 24, phase: 4, name: "Eco-Driving", type: "Theory", completed: false },
+  { id: 25, phase: 4, name: "In-Car Session 13", type: "Practical", completed: false },
   { id: 26, phase: 4, name: "In-Car Session 14", type: "Practical", completed: false },
-  { id: 27, phase: 4, name: "In-Car Session 15", type: "Practical", completed: false }
+  { id: 27, phase: 4, name: "In-Car Session 15", type: "Practical", completed: false },
 ];
 
 // Instructors
@@ -140,29 +143,32 @@ const StudentProfile = ({
   
   // Helper function to determine phase from class title
   const getPhaseFromClassTitle = (title: string, type: string): 1 | 2 | 3 | 4 => {
-    // Phase 1: Theory classes
+    const normalizedTitle = title.trim();
+    // Phase 1 theories
     const phase1Titles = ["The Vehicle", "The Driver", "The Environment", "At-Risk Behaviours", "Evaluation"];
-    if (phase1Titles.includes(title)) return 1;
+    if (phase1Titles.includes(normalizedTitle)) return 1;
     
-    // Phase 2: Theory and early practical
+    // Phase 2 curriculum
     const phase2Titles = ["Accompanied Driving", "OEA Strategy"];
-    if (phase2Titles.includes(title)) return 2;
-    if (type === "Practical" && title.startsWith("In-Car Session")) {
-      const sessionNum = parseInt(title.match(/\d+/)?.[0] || "0");
-      if (sessionNum >= 1 && sessionNum <= 3) return 2;
-      if (sessionNum >= 4 && sessionNum <= 11) return 3;
+    if (phase2Titles.includes(normalizedTitle)) return 2;
+    
+    // Phase 3 theories
+    const phase3Titles = ["Speed", "Sharing the Road", "Alcohol and Drugs", "Collision Avoidance"];
+    if (phase3Titles.includes(normalizedTitle)) return 3;
+    
+    // Phase 4 theories
+    const phase4Titles = ["Fatigue and Distractions", "Eco-Driving"];
+    if (phase4Titles.includes(normalizedTitle)) return 4;
+    
+    // Practical sessions based on number
+    if (type === "Practical" && normalizedTitle.startsWith("In-Car Session")) {
+      const sessionNum = parseInt(normalizedTitle.match(/\d+/)?.[0] || "0");
+      if (sessionNum >= 1 && sessionNum <= 4) return 2;
+      if (sessionNum >= 5 && sessionNum <= 10) return 3;
       return 4;
     }
     
-    // Phase 3: Theory and mid practical
-    const phase3Titles = ["Speed", "Sharing the Road", "Alcohol and Drugs"];
-    if (phase3Titles.includes(title)) return 3;
-    
-    // Phase 4: Theory and advanced practical
-    const phase4Titles = ["Fatigue and Distractions", "Eco-Driving"];
-    if (phase4Titles.includes(title)) return 4;
-    
-    // Default based on type
+    // Default fallback
     return type === "Theory" ? 1 : 2;
   };
 
@@ -173,9 +179,10 @@ const StudentProfile = ({
     const startTime = classItem.startTime || undefined;
     const endTime = classItem.endTime || undefined;
     const instructor = classItem.instructor || undefined;
-    const notes = classItem.notes || undefined;
+    const notes = classItem.attendanceNotes || classItem.notes || undefined;
     const phase = getPhaseFromClassTitle(classItem.className, classItem.type);
-    const completed = classItem.status === 'completed';
+    const attendanceStatus = classItem.attendanceStatus;
+    const completed = attendanceStatus ? attendanceStatus === 'completed' : classItem.status === 'completed';
     
     return {
       id: sessionId,
@@ -183,50 +190,73 @@ const StudentProfile = ({
       name: classItem.className,
       type: classItem.type as "Theory" | "Practical" | "Observation",
       completed,
+      classId: classItem.id,
+      attendanceStatus,
+      attendanceSignedAt: classItem.attendanceSignedAt,
       date,
       timeFrom: startTime,
       timeTo: endTime,
       instructor,
       notes,
+      instructorComments: classItem.attendanceInstructorFeedback || undefined,
     };
   };
 
   // Merge real classes with session template
   const mergeClassesWithTemplate = (classes: ClassItem[], template: Session[]): Session[] => {
-    // Create a map of completed classes by title
-    const completedClassesMap = new Map<string, ClassItem>();
-    classes.forEach(cls => {
-      if (cls.status === 'completed' || cls.status === 'scheduled') {
-        const key = cls.className.toLowerCase();
-        // Keep the most recent class if there are duplicates
-        if (!completedClassesMap.has(key) || 
-            (cls.date && completedClassesMap.get(key)?.date && cls.date > completedClassesMap.get(key)!.date)) {
-          completedClassesMap.set(key, cls);
-        }
-      }
-    });
+    if (!classes.length) {
+      return template.map(session => ({ ...session }));
+    }
 
-    // Merge template with real classes
-    let sessionId = 1;
-    return template.map(templateSession => {
-      // Try to find a matching class
-      const matchingClass = Array.from(completedClassesMap.values()).find(cls => {
-        const clsTitle = cls.className.toLowerCase();
-        const templateTitle = templateSession.name.toLowerCase();
-        return clsTitle === templateTitle || 
-               (templateSession.name.startsWith("In-Car Session") && 
-                cls.className.startsWith("In-Car Session") &&
-                cls.className.match(/\d+/)?.[0] === templateSession.name.match(/\d+/)?.[0]);
+    const normalizeKey = (title: string) => {
+      const isInCar = title.toLowerCase().startsWith("in-car session");
+      if (isInCar) {
+        const sessionNum = title.match(/\d+/)?.[0];
+        if (sessionNum) return `in-car-${sessionNum}`;
+      }
+      return title.trim().toLowerCase();
+    };
+
+    const classesByKey = new Map<string, ClassItem[]>();
+    classes
+      .sort((a, b) => {
+        const dateComparison = (a.date || '').localeCompare(b.date || '');
+        if (dateComparison !== 0) return dateComparison;
+        return (a.startTime || '').localeCompare(b.startTime || '');
+      })
+      .forEach(cls => {
+        const key = normalizeKey(cls.className);
+        if (!classesByKey.has(key)) {
+          classesByKey.set(key, []);
+        }
+        classesByKey.get(key)!.push(cls);
       });
 
-      if (matchingClass) {
-        const session = convertClassToSession(matchingClass, sessionId++);
-        return session;
-      } else {
-        // Use template session but keep its ID
-        return { ...templateSession, id: sessionId++ };
+    const usedClassIds = new Set<string>();
+
+    const mergedFromTemplate = template.map((templateSession, index) => {
+      const key = normalizeKey(templateSession.name);
+      const candidates = classesByKey.get(key);
+      if (candidates) {
+        const match = candidates.find(cls => !usedClassIds.has(cls.id));
+        if (match) {
+          usedClassIds.add(match.id);
+          return convertClassToSession(match, index + 1);
+        }
       }
+      return { ...templateSession, id: index + 1 };
     });
+
+    const additionalClasses = classes
+      .filter(cls => !usedClassIds.has(cls.id))
+      .sort((a, b) => {
+        const dateComparison = (a.date || '').localeCompare(b.date || '');
+        if (dateComparison !== 0) return dateComparison;
+        return (a.startTime || '').localeCompare(b.startTime || '');
+      })
+      .map((cls, idx) => convertClassToSession(cls, template.length + idx + 1));
+
+    return [...mergedFromTemplate, ...additionalClasses];
   };
 
   // Load student data and classes from database
