@@ -126,7 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (event === 'SIGNED_IN' && session?.user) {
           console.log('✅ Setting user state for:', session.user.email);
           setUser(session.user);
-          setIsAuthenticated(true);
+      setIsAuthenticated(true);
           const userRole = await fetchUserRole(session.user.id);
           setRole(userRole);
           console.log('✅ Auth state fully updated, role:', userRole);
@@ -195,8 +195,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('❌ AuthContext: Logout error:', error);
       // On error, force clear the state
       setUser(null);
-      setRole(null);
-      setIsAuthenticated(false);
+    setRole(null);
+    setIsAuthenticated(false);
       throw error;
     }
   };

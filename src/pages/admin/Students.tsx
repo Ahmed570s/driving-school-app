@@ -284,11 +284,11 @@ const Students = ({ onNavigateToStudentProfile, onNavigateToCreateStudent }: { o
           <Button variant="outline" onClick={() => loadStudents(true)} disabled={loading}>
             🔄 Refresh
           </Button>
-          <Button onClick={handleAddStudent}>
-            <Plus className="mr-1 h-4 w-4" />
-            Add New Student
-          </Button>
-        </div>
+        <Button onClick={handleAddStudent}>
+          <Plus className="mr-1 h-4 w-4" />
+          Add New Student
+        </Button>
+      </div>
       </div>
       
       <Card className="p-3 bg-blue-50 border-blue-200 mb-6">

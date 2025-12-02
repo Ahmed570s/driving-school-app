@@ -284,7 +284,7 @@ const StudentProfile = ({
         setSessions(mergedSessions);
         
         console.log(`✅ Loaded student with ${studentClasses.length} classes, merged into ${mergedSessions.length} sessions`);
-        
+  
         // Initialize edit mode if needed
         if (initialEditMode && studentData && !editedStudent) {
           setEditedStudent({ ...studentData });

@@ -42,18 +42,18 @@ const AppContent = () => {
 
   // Show normal app for desktop users
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Index />} />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
         <Route path="/signup" element={<SignUp />} />
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/instructor" element={<Instructor />} />
-        <Route path="/student" element={<Student />} />
-        <Route path="/checkin" element={<CheckIn />} />
-        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </BrowserRouter>
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/instructor" element={<Instructor />} />
+            <Route path="/student" element={<Student />} />
+            <Route path="/checkin" element={<CheckIn />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
   );
 };
 
@@ -65,8 +65,8 @@ const App = () => (
           <Toaster />
           <Sonner />
           <AppContent />
-        </TooltipProvider>
-      </AuthProvider>
+      </TooltipProvider>
+    </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );

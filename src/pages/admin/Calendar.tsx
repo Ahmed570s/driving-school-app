@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { PageLayout } from "@/components/ui/page-layout";
 import { Button } from "@/components/ui/button";
-import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, Bookmark, UserRound, Calendar as CalendarIcon, AlertTriangle, Check, ChevronsUpDown, Loader2, RefreshCw, Edit, Save, X, Trash2 } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, Bookmark, UserRound, Calendar as CalendarIcon, AlertTriangle, Check, ChevronsUpDown, Loader2, RefreshCw, Edit, Save, X, Trash2, Lock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,18 @@ const getPracticalSessionPhase = (sessionNumber: number): number => {
   return 4;
 };
 
+const BLOCKING_STATUSES: Array<ClassItem["status"]> = ["completed", "scheduled", "in_progress"];
+
+const getClassTitleDisplay = (title: string): string => {
+  if (!title) return "";
+  if (title.toLowerCase().startsWith("in-car session")) {
+    const sessionNumber = parseInt(title.match(/\d+/)?.[0] || "0", 10);
+    const phase = getPracticalSessionPhase(sessionNumber);
+    return `${title} (Phase ${phase})`;
+  }
+  return title;
+};
+
 const Calendar = () => {
   const { toast } = useToast();
   
@@ -119,6 +131,7 @@ const Calendar = () => {
   // Add Class Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [studentComboboxOpen, setStudentComboboxOpen] = useState(false);
+  const [classTitleComboboxOpen, setClassTitleComboboxOpen] = useState(false);
   const [isCreatingClass, setIsCreatingClass] = useState(false);
   const [formData, setFormData] = useState<ClassFormData>({
     type: "",
@@ -133,6 +146,10 @@ const Calendar = () => {
     location: "Main Campus", // Default location
     cost: undefined, // Optional cost
   });
+  const [takenTheoryTitles, setTakenTheoryTitles] = useState<string[]>([]);
+  const [takenPracticalTitles, setTakenPracticalTitles] = useState<string[]>([]);
+  const [groupTitleLoading, setGroupTitleLoading] = useState(false);
+  const [studentTitleLoading, setStudentTitleLoading] = useState(false);
   
   // ============================================================================
   // DATA FETCHING - Load real data from services
@@ -430,14 +447,154 @@ const Calendar = () => {
   
   // Handle form field changes
   const handleFormChange = (field: keyof ClassFormData, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value,
-      // Reset student selection when group is selected and vice versa
-      ...(field === 'selectedGroup' && value ? { selectedStudents: [] } : {}),
-      ...(field === 'selectedStudents' && value.length > 0 ? { selectedGroup: "" } : {}),
-    }));
+    setFormData(prev => {
+      let next: ClassFormData = {
+        ...prev,
+        [field]: value,
+      };
+
+      if (field === 'type') {
+        next = {
+          ...next,
+          title: "",
+          selectedGroup: "",
+          selectedStudents: [],
+        };
+      }
+
+      if (field === 'selectedGroup') {
+        next = {
+          ...next,
+          selectedStudents: [],
+          title: "",
+        };
+      }
+
+      if (field === 'selectedStudents') {
+        next = {
+          ...next,
+          selectedGroup: "",
+          title: "",
+        };
+      }
+
+      return next;
+    });
   };
+
+  // Load existing theory classes for the selected group to prevent duplicates
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchGroupHistory = async () => {
+      if (formData.type !== "Theory" || !formData.selectedGroup) {
+        if (isActive) {
+          setTakenTheoryTitles([]);
+        }
+        return;
+      }
+
+      setGroupTitleLoading(true);
+      try {
+        const groupClasses = await getClasses({ groupId: formData.selectedGroup });
+        if (!isActive) return;
+
+        const blockedTitles = Array.from(
+          new Set(
+            groupClasses
+              .filter(cls => cls.type === "Theory" && BLOCKING_STATUSES.includes(cls.status))
+              .map(cls => cls.className.toLowerCase())
+          )
+        );
+        setTakenTheoryTitles(blockedTitles);
+      } catch (error) {
+        if (isActive) {
+          console.error('❌ Failed to check group classes:', error);
+          toast({
+            title: "Unable to verify group classes",
+            description: "Could not check which theory lessons this group already has.",
+            variant: "destructive",
+          });
+          setTakenTheoryTitles([]);
+        }
+      } finally {
+        if (isActive) {
+          setGroupTitleLoading(false);
+        }
+      }
+    };
+
+    fetchGroupHistory();
+
+    return () => {
+      isActive = false;
+    };
+  }, [formData.type, formData.selectedGroup, toast]);
+
+  // Load existing practical classes for the selected student to prevent duplicates
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchStudentHistory = async () => {
+      if (formData.type !== "Practical") {
+        if (isActive) {
+          setTakenPracticalTitles([]);
+        }
+        return;
+      }
+
+      const selectedStudentName = formData.selectedStudents[0];
+      if (!selectedStudentName) {
+        if (isActive) {
+          setTakenPracticalTitles([]);
+        }
+        return;
+      }
+
+      const selectedStudent = students.find(student => student.name === selectedStudentName);
+      if (!selectedStudent) {
+        if (isActive) {
+          setTakenPracticalTitles([]);
+        }
+        return;
+      }
+
+      setStudentTitleLoading(true);
+      try {
+        const studentClasses = await getClasses({ studentId: selectedStudent.id });
+        if (!isActive) return;
+
+        const blockedTitles = Array.from(
+          new Set(
+            studentClasses
+              .filter(cls => cls.type === "Practical" && BLOCKING_STATUSES.includes(cls.status))
+              .map(cls => cls.className.toLowerCase())
+          )
+        );
+        setTakenPracticalTitles(blockedTitles);
+      } catch (error) {
+        if (isActive) {
+          console.error('❌ Failed to check student classes:', error);
+          toast({
+            title: "Unable to verify student classes",
+            description: "Could not check which practical lessons this student already has.",
+            variant: "destructive",
+          });
+          setTakenPracticalTitles([]);
+        }
+      } finally {
+        if (isActive) {
+          setStudentTitleLoading(false);
+        }
+      }
+    };
+
+    fetchStudentHistory();
+
+    return () => {
+      isActive = false;
+    };
+  }, [formData.type, formData.selectedStudents, students, toast]);
   
   // Handle student selection
   const handleStudentToggle = (studentName: string) => {
@@ -465,6 +622,29 @@ const Calendar = () => {
     }
     return students.filter(student => formData.selectedStudents.includes(student.name));
   };
+  const isTitleSelectionReady = (
+    (formData.type === "Theory" && !!formData.selectedGroup) ||
+    (formData.type === "Practical" && formData.selectedStudents.length === 1)
+  );
+  const titleAvailabilityLoading = formData.type === "Theory"
+    ? groupTitleLoading
+    : formData.type === "Practical"
+      ? studentTitleLoading
+      : false;
+  const classTitleSource = formData.type === "Theory"
+    ? THEORY_CLASS_TITLES
+    : formData.type === "Practical"
+      ? PRACTICAL_CLASS_TITLES
+      : [];
+  const takenTitleSet = new Set(
+    formData.type === "Theory"
+      ? takenTheoryTitles
+      : formData.type === "Practical"
+        ? takenPracticalTitles
+        : []
+  );
+  const availableClassTitles = classTitleSource.filter(title => !takenTitleSet.has(title.toLowerCase()));
+  const unavailableClassTitles = classTitleSource.filter(title => takenTitleSet.has(title.toLowerCase()));
   
   // Enhanced form validation
   const validateForm = () => {
@@ -595,6 +775,8 @@ const Calendar = () => {
       location: "Main Campus",
       cost: undefined,
     });
+    setStudentComboboxOpen(false);
+    setClassTitleComboboxOpen(false);
   };
 
   // 🧪 TEMPORARY TEST FUNCTION - Remove this later
@@ -1527,68 +1709,238 @@ const Calendar = () => {
           </DialogHeader>
           
           <div className="grid gap-6 py-4">
-            {/* Row 1: Class Type and Title */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Step 1: Class Type */}
+            <div className="space-y-2">
+              <Label htmlFor="class-type">Class Type *</Label>
+              <Select 
+                value={formData.type} 
+                onValueChange={(value: "Theory" | "Practical") => {
+                  handleFormChange('type', value);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select class type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Theory">Theory</SelectItem>
+                  <SelectItem value="Practical">Practical</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Step 2: Participant (Group or Student) */}
+            {formData.type && (
               <div className="space-y-2">
-                <Label htmlFor="class-type">Class Type *</Label>
-                <Select 
-                  value={formData.type} 
-                  onValueChange={(value: "Theory" | "Practical") => {
-                    handleFormChange('type', value);
-                    // Reset title when type changes
-                    handleFormChange('title', '');
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select class type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Theory">Theory</SelectItem>
-                    <SelectItem value="Practical">Practical</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="title">Class Title *</Label>
-                {formData.type ? (
-                  <Select
-                    value={formData.title}
-                    onValueChange={(value) => handleFormChange('title', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={`Select ${formData.type.toLowerCase()} class title`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {formData.type === "Theory" ? (
-                        // Theory class titles
-                        THEORY_CLASS_TITLES.map((title) => (
-                          <SelectItem key={title} value={title}>
-                            {title}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        // Practical class titles (In-Car Sessions) with phase info
-                        PRACTICAL_CLASS_TITLES.map((title, index) => {
-                          const sessionNumber = index + 1;
-                          const phase = getPracticalSessionPhase(sessionNumber);
-                          return (
-                            <SelectItem key={title} value={title}>
-                              {title} (Phase {phase})
+                {formData.type === "Theory" ? (
+                  <>
+                    <Label htmlFor="group">Select Group *</Label>
+                    <Select 
+                      value={formData.selectedGroup} 
+                      onValueChange={(value) => handleFormChange('selectedGroup', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a group for theory class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {groupsLoading ? (
+                          <SelectItem value="" disabled>Loading groups...</SelectItem>
+                        ) : groupOptions.length === 0 ? (
+                          <SelectItem value="" disabled>No groups available</SelectItem>
+                        ) : (
+                          groupOptions.map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              {group.name} ({group.currentEnrollment} students)
                             </SelectItem>
-                          );
-                        })
-                      )}
-                    </SelectContent>
-                  </Select>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </>
                 ) : (
-                  <Input
-                    id="title"
-                    disabled
-                    placeholder="Select class type first"
-                    className="bg-muted"
-                  />
+                  <>
+                    <Label htmlFor="student">Select Student *</Label>
+                    <Popover open={studentComboboxOpen} onOpenChange={setStudentComboboxOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={studentComboboxOpen}
+                          className="w-full justify-between"
+                        >
+                          {formData.selectedStudents[0] 
+                            ? students.find(student => student.name === formData.selectedStudents[0])?.name + 
+                              ` (${students.find(student => student.name === formData.selectedStudents[0])?.studentId})`
+                            : studentsLoading 
+                              ? "Loading students..."
+                              : students.length === 0
+                                ? "No students available"
+                                : "Select a student for practical class..."
+                          }
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0">
+                        <Command>
+                          <CommandInput placeholder="Search students..." />
+                          <CommandList>
+                            <CommandEmpty>No student found.</CommandEmpty>
+                            <CommandGroup>
+                              {studentsLoading ? (
+                                <CommandItem disabled>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Loading students...
+                                </CommandItem>
+                              ) : students.length === 0 ? (
+                                <CommandItem disabled>No students available</CommandItem>
+                              ) : (
+                                (() => {
+                                  const availableStudents = students.filter(student => 
+                                    formData.type === "Practical" ? student.currentPhase >= 2 : true
+                                  );
+                                  
+                                  if (formData.type === "Practical" && availableStudents.length === 0) {
+                                    return (
+                                      <CommandItem disabled>
+                                        No students available for practical classes (Phase 2+ required)
+                                      </CommandItem>
+                                    );
+                                  }
+                                  
+                                  return availableStudents.map((student) => (
+                                    <CommandItem
+                                      key={student.id}
+                                      value={student.name}
+                                      onSelect={(currentValue) => {
+                                        const newValue = currentValue === formData.selectedStudents[0] ? [] : [currentValue];
+                                        handleFormChange('selectedStudents', newValue);
+                                        setStudentComboboxOpen(false);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          formData.selectedStudents[0] === student.name ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      {student.name} ({student.studentId}) - Phase {student.currentPhase}
+                                    </CommandItem>
+                                  ));
+                                })()
+                              )}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </>
                 )}
               </div>
+            )}
+
+            {/* Step 3: Class Title */}
+            <div className="space-y-2">
+              <Label htmlFor="title">Class Title *</Label>
+              {!formData.type ? (
+                <Input
+                  id="title"
+                  disabled
+                  placeholder="Select class type first"
+                  className="bg-muted"
+                />
+              ) : !isTitleSelectionReady ? (
+                <Input
+                  id="title"
+                  disabled
+                  placeholder={
+                    formData.type === "Theory"
+                      ? "Select a group before choosing a title"
+                      : "Select a student before choosing a title"
+                  }
+                  className="bg-muted"
+                />
+              ) : (
+                <Popover open={classTitleComboboxOpen} onOpenChange={setClassTitleComboboxOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={classTitleComboboxOpen}
+                      className="w-full justify-between"
+                      disabled={titleAvailabilityLoading}
+                    >
+                      {titleAvailabilityLoading
+                        ? "Checking previous classes..."
+                        : formData.title
+                          ? getClassTitleDisplay(formData.title)
+                          : `Select ${formData.type.toLowerCase()} class title`}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[420px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Search classes..." disabled={titleAvailabilityLoading} />
+                      <CommandList>
+                        <CommandEmpty>No class found.</CommandEmpty>
+                        {titleAvailabilityLoading ? (
+                          <CommandItem disabled>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Checking classes...
+                          </CommandItem>
+                        ) : (
+                          <>
+                            <CommandGroup heading="Available classes">
+                              {availableClassTitles.length === 0 ? (
+                                <CommandItem disabled>
+                                  <Check className="mr-2 h-4 w-4 text-muted-foreground" />
+                                  All sessions already scheduled
+                                </CommandItem>
+                              ) : (
+                                availableClassTitles.map((title) => (
+                                  <CommandItem
+                                    key={title}
+                                    value={title.toLowerCase()}
+                                    onSelect={() => {
+                                      handleFormChange('title', title);
+                                      setClassTitleComboboxOpen(false);
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        formData.title === title ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {getClassTitleDisplay(title)}
+                                  </CommandItem>
+                                ))
+                              )}
+                            </CommandGroup>
+                            {unavailableClassTitles.length > 0 && (
+                              <>
+                                <CommandSeparator />
+                                <CommandGroup heading="Already scheduled">
+                                  {unavailableClassTitles.map((title) => (
+                                    <CommandItem key={title} value={title.toLowerCase()} disabled>
+                                      <Lock className="mr-2 h-4 w-4 text-muted-foreground" />
+                                      <span className="flex-1">{getClassTitleDisplay(title)}</span>
+                                      <Badge variant="secondary" className="text-xs">Taken</Badge>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+              {isTitleSelectionReady && !titleAvailabilityLoading && (
+                <p className="text-xs text-muted-foreground">
+                  Titles already taken for this {formData.type === "Theory" ? "group" : "student"} are listed under "Already scheduled".
+                </p>
+              )}
             </div>
 
             {/* Row 2: Instructor */}
@@ -1661,121 +2013,6 @@ const Calendar = () => {
                 </Select>
               </div>
             </div>
-            
-            {/* Conditional Student Selection based on Class Type */}
-            {formData.type && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                {formData.type === "Theory" ? (
-                  // Theory: Show Group Dropdown
-                  <>
-                        <Label htmlFor="group">Select Group *</Label>
-                    <Select 
-                      value={formData.selectedGroup} 
-                      onValueChange={(value) => handleFormChange('selectedGroup', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a group for theory class" />
-                      </SelectTrigger>
-                      <SelectContent>
-                            {groupsLoading ? (
-                              <SelectItem value="" disabled>Loading groups...</SelectItem>
-                            ) : groupOptions.length === 0 ? (
-                              <SelectItem value="" disabled>No groups available</SelectItem>
-                            ) : (
-                              groupOptions.map((group) => (
-                          <SelectItem key={group.id} value={group.id}>
-                                  {group.name} ({group.currentEnrollment} students)
-                          </SelectItem>
-                              ))
-                            )}
-                      </SelectContent>
-                    </Select>
-                  </>
-                ) : (
-                  // Practical: Show Single Student Dropdown with Search
-                  <>
-                        <Label htmlFor="student">Select Student *</Label>
-                    <Popover open={studentComboboxOpen} onOpenChange={setStudentComboboxOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={studentComboboxOpen}
-                          className="w-full justify-between"
-                        >
-                          {formData.selectedStudents[0] 
-                                ? students.find(student => student.name === formData.selectedStudents[0])?.name + 
-                                  ` (${students.find(student => student.name === formData.selectedStudents[0])?.studentId})`
-                                : studentsLoading 
-                                  ? "Loading students..."
-                                  : students.length === 0
-                                    ? "No students available"
-                            : "Select a student for practical class..."
-                          }
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[400px] p-0">
-                        <Command>
-                          <CommandInput placeholder="Search students..." />
-                          <CommandList>
-                            <CommandEmpty>No student found.</CommandEmpty>
-                            <CommandGroup>
-                                  {studentsLoading ? (
-                                    <CommandItem disabled>
-                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                      Loading students...
-                                    </CommandItem>
-                                  ) : students.length === 0 ? (
-                                    <CommandItem disabled>No students available</CommandItem>
-                                  ) : (
-                                    (() => {
-                                      const availableStudents = students.filter(student => 
-                                        formData.type === "Practical" ? student.currentPhase >= 2 : true
-                                      );
-                                      
-                                      if (formData.type === "Practical" && availableStudents.length === 0) {
-                                        return (
-                                          <CommandItem disabled>
-                                            No students available for practical classes (Phase 2+ required)
-                                          </CommandItem>
-                                        );
-                                      }
-                                      
-                                      return availableStudents.map((student) => (
-                                <CommandItem
-                                  key={student.id}
-                                  value={student.name}
-                                  onSelect={(currentValue) => {
-                                    const newValue = currentValue === formData.selectedStudents[0] ? [] : [currentValue];
-                                    handleFormChange('selectedStudents', newValue);
-                                    setStudentComboboxOpen(false);
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      formData.selectedStudents[0] === student.name ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                          {student.name} ({student.studentId}) - Phase {student.currentPhase}
-                                </CommandItem>
-                                      ));
-                                    })()
-                                  )}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </>
-                )}
-                  </div>
-                </div>
-              </div>
-            )}
             
             {/* Notes section */}
             <div className="space-y-2">

@@ -18,7 +18,7 @@ const Instructor = () => {
   const handleLogout = async () => {
     try {
       await logout();
-      navigate("/");
+    navigate("/");
     } catch (error) {
       console.error('Logout error:', error);
     }

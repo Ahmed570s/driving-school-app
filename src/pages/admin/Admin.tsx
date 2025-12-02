@@ -120,8 +120,8 @@ const Admin = () => {
       await logout();
       console.log('✅ Logout successful, redirecting...');
       
-      toast({
-        title: "Logged out successfully",
+    toast({
+      title: "Logged out successfully",
         description: "You have been logged out of your admin account.",
       });
       
@@ -136,9 +136,9 @@ const Admin = () => {
         title: "Logout Error",
         description: "There was an issue logging out. Please try again.",
         variant: "destructive"
-      });
+    });
     }
-    };
+  };
   
   const handleAddStudent = () => {
     navigateToCreateStudent();
