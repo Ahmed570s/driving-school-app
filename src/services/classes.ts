@@ -112,6 +112,40 @@ export interface ClassFilters {
   type?: 'theory' | 'practical';
 }
 
+const CONFLICT_BLOCKING_STATUSES: Array<ClassItem['status']> = ['scheduled', 'in_progress'];
+const BUSINESS_HOURS = {
+  startMinutes: 8 * 60,  // 8:00 AM
+  endMinutes: 20 * 60,   // 8:00 PM
+};
+
+export interface ConflictCheckParams {
+  classId?: string;
+  instructorId: string;
+  studentId?: string | null;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:MM
+  durationMinutes: number;
+  type: 'Theory' | 'Practical';
+}
+
+export interface ConflictDetail {
+  type: 'instructor' | 'student' | 'time';
+  message: string;
+  conflictingClass?: ClassItem;
+}
+
+export interface ConflictSuggestion {
+  startTime: string;
+  endTime: string;
+  reason: string;
+}
+
+export interface ConflictCheckResult {
+  hasConflicts: boolean;
+  conflicts: ConflictDetail[];
+  suggestions: ConflictSuggestion[];
+}
+
 // ============================================================================
 // HELPER FUNCTIONS - Convert database format to UI format
 // ============================================================================
@@ -745,6 +779,34 @@ export const getClassesByStudent = async (studentId: string): Promise<ClassItem[
 };
 
 /**
+ * Get an instructor's schedule for a given day
+ */
+export const getInstructorSchedule = async (
+  instructorId: string,
+  date: string,
+  options: { includeStatuses?: ClassItem['status'][]; excludeClassId?: string } = {}
+): Promise<ClassItem[]> => {
+  const classes = await getClasses({
+    instructorId,
+    startDate: date,
+    endDate: date,
+  });
+
+  let schedule = classes;
+
+  if (options.includeStatuses?.length) {
+    const allowed = new Set(options.includeStatuses);
+    schedule = schedule.filter(cls => allowed.has(cls.status));
+  }
+
+  if (options.excludeClassId) {
+    schedule = schedule.filter(cls => cls.id !== options.excludeClassId);
+  }
+
+  return schedule;
+};
+
+/**
  * Get classes for a specific date range
  */
 export const getClassesByDateRange = async (startDate: string, endDate: string): Promise<ClassItem[]> => {
@@ -763,4 +825,182 @@ export const getUpcomingClasses = async (): Promise<ClassItem[]> => {
     endDate: nextWeek,
     status: 'scheduled'
   });
+};
+
+// ============================================================================
+// CONFLICT DETECTION
+// ============================================================================
+
+type ScheduleInterval = {
+  start: number;
+  end: number;
+  classItem: ClassItem;
+};
+
+const safeTimeStringToMinutes = (time: string): number => {
+  if (!time) return 0;
+  const [hoursStr, minutesStr] = time.split(':');
+  const hours = parseInt(hoursStr, 10);
+  const minutes = parseInt(minutesStr, 10);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return 0;
+  return hours * 60 + minutes;
+};
+
+const minutesToDisplayTime = (minutes: number): string => {
+  const normalized = Math.max(0, Math.min(minutes, 24 * 60));
+  const hrs = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+  return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+};
+
+const getDurationFromClass = (cls: ClassItem): number => {
+  if (cls.duration) {
+    const parsed = parseInt(cls.duration, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 60;
+};
+
+const buildScheduleIntervals = (classes: ClassItem[]): ScheduleInterval[] => {
+  return classes.map(cls => {
+    const start = safeTimeStringToMinutes(cls.startTime);
+    let end = cls.endTime ? safeTimeStringToMinutes(cls.endTime) : start + getDurationFromClass(cls);
+    if (end <= start) {
+      end = start + getDurationFromClass(cls);
+    }
+    return {
+      start,
+      end,
+      classItem: cls,
+    };
+  });
+};
+
+const getOverlappingClasses = (intervals: ScheduleInterval[], start: number, end: number): ClassItem[] => {
+  return intervals
+    .filter(interval => start < interval.end && end > interval.start)
+    .map(interval => interval.classItem);
+};
+
+const hasIntervalConflict = (intervals: ScheduleInterval[], start: number, end: number): boolean => {
+  return intervals.some(interval => start < interval.end && end > interval.start);
+};
+
+const generateConflictSuggestions = (
+  requestedStart: number,
+  duration: number,
+  instructorIntervals: ScheduleInterval[],
+  studentIntervals: ScheduleInterval[],
+  dateLabel?: string,
+  limit = 3
+): ConflictSuggestion[] => {
+  const suggestions: ConflictSuggestion[] = [];
+
+  for (let candidate = BUSINESS_HOURS.startMinutes; candidate <= BUSINESS_HOURS.endMinutes - duration; candidate += 30) {
+    if (candidate === requestedStart) continue; // Skip the original slot
+
+    const candidateEnd = candidate + duration;
+
+    if (hasIntervalConflict(instructorIntervals, candidate, candidateEnd)) continue;
+    if (studentIntervals.length && hasIntervalConflict(studentIntervals, candidate, candidateEnd)) continue;
+
+    suggestions.push({
+      startTime: minutesToDisplayTime(candidate),
+      endTime: minutesToDisplayTime(candidateEnd),
+      reason: candidate < requestedStart
+        ? `Earlier slot available on ${dateLabel ?? 'the same day'}`
+        : `Next available slot on ${dateLabel ?? 'the same day'}`,
+    });
+
+    if (suggestions.length >= limit) {
+      break;
+    }
+  }
+
+  return suggestions;
+};
+
+/**
+ * Check for instructor/student conflicts before scheduling a class
+ */
+export const checkClassConflicts = async (params: ConflictCheckParams): Promise<ConflictCheckResult> => {
+  const {
+    classId,
+    instructorId,
+    studentId,
+    date,
+    startTime,
+    durationMinutes,
+    type,
+  } = params;
+
+  if (!instructorId) {
+    throw new Error('Instructor ID is required to check conflicts');
+  }
+  if (!date || !startTime || !durationMinutes) {
+    throw new Error('Date, start time, and duration are required to check conflicts');
+  }
+
+  const conflicts: ConflictDetail[] = [];
+  const startMinutes = safeTimeStringToMinutes(startTime);
+  const endMinutes = startMinutes + durationMinutes;
+
+  if (startMinutes < BUSINESS_HOURS.startMinutes || endMinutes > BUSINESS_HOURS.endMinutes) {
+    conflicts.push({
+      type: 'time',
+      message: `Classes must be scheduled between 08:00 and 20:00. Requested slot ${startTime} - ${minutesToDisplayTime(endMinutes)} is outside business hours.`,
+    });
+  }
+
+  const instructorSchedule = await getInstructorSchedule(instructorId, date, {
+    includeStatuses: CONFLICT_BLOCKING_STATUSES,
+    excludeClassId: classId,
+  });
+  const instructorIntervals = buildScheduleIntervals(instructorSchedule);
+  const instructorOverlaps = getOverlappingClasses(instructorIntervals, startMinutes, endMinutes);
+
+  instructorOverlaps.forEach(conflictClass => {
+    conflicts.push({
+      type: 'instructor',
+      message: `Instructor already has "${conflictClass.className}" from ${conflictClass.startTime} to ${conflictClass.endTime}.`,
+      conflictingClass: conflictClass,
+    });
+  });
+
+  let studentIntervals: ScheduleInterval[] = [];
+
+  if (type === 'Practical' && studentId) {
+    const studentClasses = await getClasses({
+      studentId,
+      startDate: date,
+      endDate: date,
+    });
+
+    const filteredStudentClasses = studentClasses.filter(cls =>
+      cls.id !== classId && CONFLICT_BLOCKING_STATUSES.includes(cls.status)
+    );
+
+    studentIntervals = buildScheduleIntervals(filteredStudentClasses);
+    const studentOverlaps = getOverlappingClasses(studentIntervals, startMinutes, endMinutes);
+
+    studentOverlaps.forEach(conflictClass => {
+      conflicts.push({
+        type: 'student',
+        message: `Student already has "${conflictClass.className}" from ${conflictClass.startTime} to ${conflictClass.endTime}.`,
+        conflictingClass: conflictClass,
+      });
+    });
+  }
+
+  const suggestions = conflicts.length > 0
+    ? generateConflictSuggestions(startMinutes, durationMinutes, instructorIntervals, studentIntervals, date)
+    : [];
+
+  return {
+    hasConflicts: conflicts.length > 0,
+    conflicts,
+    suggestions,
+  };
 };
