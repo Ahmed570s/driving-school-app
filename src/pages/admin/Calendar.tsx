@@ -1295,18 +1295,18 @@ const Calendar = () => {
           const dayClasses = getClassesForDay(day);
           const displayClasses = dayClasses.slice(0, 1); // Only show first 1 class
           const remainingCount = dayClasses.length - 1;  // Count remaining classes
-          const dayNum = day.getDay(); // 0 = Sunday, 3 = Wednesday
-          const isWednesday = dayNum === 3;
-          const isDay21 = day.getDate() === 21; // Check if it's the 21st day
+          const isTodayCell = isToday(day);
           
           return (
             <div
               key={day.toString()}
-              className={`bg-card rounded-xl p-2.5 h-28 shadow-sm border border-border/50 hover:shadow-md transition-shadow ${
-                isDay21 ? 'bg-rose-50 border-rose-200' : ''
+              className={`rounded-xl p-2.5 h-28 shadow-sm border hover:shadow-md transition-shadow ${
+                isTodayCell
+                  ? 'bg-rose-50 border-rose-200'
+                  : 'bg-card border-border/50'
               }`}
             >
-              <div className="text-sm font-semibold mb-1 text-foreground">{format(day, 'd')}</div>
+              <div className={`text-sm font-semibold mb-1 ${isTodayCell ? 'text-rose-600' : 'text-foreground'}`}>{format(day, 'd')}</div>
               
               <div className="space-y-1">
               {displayClasses.map((cls) => (
@@ -1361,13 +1361,15 @@ const Calendar = () => {
           {/* Day headers */}
           <div className="flex-1 grid grid-cols-7 gap-3">
             {weekDays.map((day, index) => (
-              <div 
-                key={day.toString()} 
-                className={`text-center py-3 font-medium text-muted-foreground rounded-lg ${
-                  isToday(day) ? 'bg-rose-50 border border-rose-200' : 'bg-muted'
+              <div
+                key={day.toString()}
+                className={`text-center py-3 font-medium rounded-lg border ${
+                  isToday(day)
+                    ? 'bg-rose-50 border-rose-200 text-rose-600'
+                    : 'bg-muted border-border/50 text-muted-foreground'
                 }`}
               >
-                <div className="text-sm font-medium text-muted-foreground">{format(day, 'EEE')}</div>
+                <div className="text-sm font-medium">{format(day, 'EEE')}</div>
                 <div className="text-base font-semibold">{format(day, 'd')}</div>
               </div>
             ))}
