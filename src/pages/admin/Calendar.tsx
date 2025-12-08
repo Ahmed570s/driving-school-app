@@ -85,6 +85,40 @@ const Calendar = () => {
   const [currentMonth, setCurrentMonth] = useState(today);
   const [selectedDay, setSelectedDay] = useState(today);
   const [viewMode, setViewMode] = useState("month");
+
+  // Weekly navigation state/helpers (used by view-aware data fetching)
+  const getStartOfWeek = (date: Date) => {
+    const day = date.getDay();
+    const diff = date.getDate() - day; // Sunday is 0
+    return new Date(date.setDate(diff));
+  };
+  const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
+  const prevWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
+  const nextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
+
+  const getViewDateRange = () => {
+    if (viewMode === "week") {
+      const start = getStartOfWeek(new Date(currentWeekStart));
+      const end = addDays(start, 6);
+      return {
+        startDate: format(start, 'yyyy-MM-dd'),
+        endDate: format(end, 'yyyy-MM-dd'),
+      };
+    }
+
+    if (viewMode === "day") {
+      return {
+        startDate: format(selectedDay, 'yyyy-MM-dd'),
+        endDate: format(selectedDay, 'yyyy-MM-dd'),
+      };
+    }
+
+    // default to month view
+    return {
+      startDate: format(startOfMonth(currentMonth), 'yyyy-MM-dd'),
+      endDate: format(endOfMonth(currentMonth), 'yyyy-MM-dd'),
+    };
+  };
   
   // Data state - Replace mock data arrays with real state management
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -150,6 +184,8 @@ const Calendar = () => {
   const [takenPracticalTitles, setTakenPracticalTitles] = useState<string[]>([]);
   const [groupTitleLoading, setGroupTitleLoading] = useState(false);
   const [studentTitleLoading, setStudentTitleLoading] = useState(false);
+  // Mini calendar month-level class indicators
+  const [miniCalendarClasses, setMiniCalendarClasses] = useState<Record<string, number>>({});
   
   // ============================================================================
   // DATA FETCHING - Load real data from services
@@ -250,21 +286,19 @@ const Calendar = () => {
     loadStudents();
   }, []); // Run once on component mount
 
-  // Load classes data - depends on current month and selected instructor
+  // Load classes data - depends on view range and selected instructor
   useEffect(() => {
     const loadClasses = async () => {
       try {
         setLoading(true);
+        const { startDate, endDate } = getViewDateRange();
         console.log('📅 Loading classes for calendar...', {
-          month: format(currentMonth, 'yyyy-MM'),
+          viewMode,
+          startDate,
+          endDate,
           instructor: selectedInstructorId || 'all'
         });
         
-        // Calculate date range for current month
-        const startDate = format(startOfMonth(currentMonth), 'yyyy-MM-dd');
-        const endDate = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
-        
-        // Load classes with filters
         // Always filter by instructor (no "All Instructors" option)
         if (!selectedInstructorId) {
           console.log('⚠️ No instructor selected, skipping class load');
@@ -280,7 +314,7 @@ const Calendar = () => {
         
         setClasses(classesData);
         
-        console.log(`✅ Loaded ${classesData.length} classes for ${format(currentMonth, 'MMMM yyyy')}`);
+        console.log(`✅ Loaded ${classesData.length} classes for view: ${viewMode}`);
       } catch (error) {
         console.error('❌ Failed to load classes:', error);
         toast({
@@ -301,7 +335,38 @@ const Calendar = () => {
       setClasses([]);
       setLoading(false);
     }
-  }, [currentMonth, selectedInstructorId]); // Removed instructorsLoading from dependencies to prevent infinite loop
+  }, [viewMode, currentMonth, currentWeekStart, selectedDay, selectedInstructorId]); // Removed instructorsLoading from dependencies to prevent infinite loop
+
+  // Load month-level classes for mini calendar (so badges show even if week/day not fetched)
+  useEffect(() => {
+    const loadMiniCalendarClasses = async () => {
+      try {
+        // Require instructor
+        if (!selectedInstructorId || instructorsLoading) return;
+
+        const monthStartDate = format(startOfMonth(selectedDay), 'yyyy-MM-dd');
+        const monthEndDate = format(endOfMonth(selectedDay), 'yyyy-MM-dd');
+
+        const classesData = await getClasses({
+          startDate: monthStartDate,
+          endDate: monthEndDate,
+          instructorId: selectedInstructorId,
+        });
+
+        const counts: Record<string, number> = {};
+        classesData.forEach((cls) => {
+          counts[cls.date] = (counts[cls.date] || 0) + 1;
+        });
+        setMiniCalendarClasses(counts);
+      } catch (error) {
+        console.error('❌ Failed to load mini calendar classes:', error);
+        // Non-blocking: do not toast to avoid noise
+        setMiniCalendarClasses({});
+      }
+    };
+
+    loadMiniCalendarClasses();
+  }, [selectedDay, selectedInstructorId, instructorsLoading]);
 
   // Update form instructor when selected instructor changes
   // Note: Removed auto-sync of form instructor with selected tab
@@ -319,8 +384,7 @@ const Calendar = () => {
     try {
       console.log('🔄 Refreshing classes...');
       
-      const startDate = format(startOfMonth(currentMonth), 'yyyy-MM-dd');
-      const endDate = format(endOfMonth(currentMonth), 'yyyy-MM-dd');
+      const { startDate, endDate } = getViewDateRange();
       
       // Always filter by instructor (no "All Instructors" option)
       if (!selectedInstructorId) {
@@ -379,17 +443,6 @@ const Calendar = () => {
     setSelectedDay(newDay);
     console.log('➡️ Navigated to next day:', format(newDay, 'yyyy-MM-dd'));
   };
-  
-  // Weekly navigation functions - Initialize to start of current week
-  const getStartOfWeek = (date: Date) => {
-    const day = date.getDay();
-    const diff = date.getDate() - day; // Sunday is 0
-    return new Date(date.setDate(diff));
-  };
-  const [currentWeekStart, setCurrentWeekStart] = useState(getStartOfWeek(new Date()));
-  const prevWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
-  const nextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
-  
   
   // Get current instructor name for display
   const getCurrentInstructorName = () => {
@@ -1603,8 +1656,8 @@ const Calendar = () => {
               <CardContent className="p-3">
                 <div className="grid grid-cols-7 gap-1">
                   {/* Days of week headers */}
-                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day) => (
-                    <div key={day} className="text-center py-2 text-xs font-medium text-muted-foreground">
+                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
+                    <div key={`${day}-${idx}`} className="text-center py-2 text-xs font-medium text-muted-foreground">
                       {day}
                     </div>
                   ))}
@@ -1616,9 +1669,10 @@ const Calendar = () => {
                   
                   {/* Calendar days */}
                   {calendarMonthDays.map((day) => {
+                    const dateKey = format(day, 'yyyy-MM-dd');
                     const dayClasses = getClassesForDay(day);
-                    const isSelected = format(day, 'yyyy-MM-dd') === format(selectedDay, 'yyyy-MM-dd');
-                    const hasClasses = dayClasses.length > 0;
+                    const isSelected = dateKey === format(selectedDay, 'yyyy-MM-dd');
+                    const hasClasses = (miniCalendarClasses[dateKey] || dayClasses.length) > 0;
                     
                     return (
                       <button
