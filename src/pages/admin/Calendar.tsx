@@ -1060,22 +1060,32 @@ const Calendar = () => {
   // Time slots for weekly view (8:00 AM to 8:00 PM in 1-hour steps)
   const timeSlots = Array.from({ length: 13 }, (_, i) => `${i + 8}:00`);
   
-  // Parse time string to hour number
-  const parseTimeToHour = (timeString: string): number => {
-    const [hour] = timeString.split(':').map(Number);
-    return hour;
+  // Parse time string to minutes from midnight
+  const parseTimeToMinutes = (timeString: string): number => {
+    const [hour, minute] = timeString.split(':').map(Number);
+    return hour * 60 + (minute || 0);
   };
   
-  // Calculate class position in weekly view
+  // Calculate class position in weekly view (supports minutes + clamps to grid)
   const getClassPositionData = (cls: ClassItem) => {
-    const startHour = parseTimeToHour(cls.startTime);
-    const endHour = parseTimeToHour(cls.endTime);
-    const duration = endHour - startHour;
-    
+    const startMinutes = parseTimeToMinutes(cls.startTime);
+    const endMinutes = parseTimeToMinutes(cls.endTime);
+    const durationMinutes = Math.max(endMinutes - startMinutes, 30); // at least 30 mins
+
+    const gridStartMinutes = 8 * 60; // 8:00 AM
+    const slotHeight = 40; // px per hour
+
+    const offsetMinutes = Math.max(startMinutes - gridStartMinutes, 0);
+    const startOffsetSlots = offsetMinutes / 60;
+    const topPosition = startOffsetSlots * slotHeight;
+    const height = (durationMinutes / 60) * slotHeight - 8; // padding space
+
     return {
-      startHour,
-      endHour,
-      duration
+      startMinutes,
+      endMinutes,
+      durationMinutes,
+      topPosition,
+      height
     };
   };
   
@@ -1467,18 +1477,14 @@ const Calendar = () => {
                   
                   {/* Class cards */}
                   {dayClasses.map((cls) => {
-                    const { startHour, duration } = getClassPositionData(cls);
-                    const slotIndex = startHour - 8; // 8 is first hour (8:00)
-                    const topPosition = slotIndex * 40; // 40px per slot (h-10)
-                    const cardHeight = duration * 40 - 8; // Duration * slot height - padding for visual separation
-                    
+                    const { topPosition, height, durationMinutes } = getClassPositionData(cls);
                     return (
                       <div
                         key={cls.id}
                         className={`absolute left-1 right-1 ${cls.type === "Theory" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-rose-100 text-rose-700 border border-rose-200"} p-2 rounded-md cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.02] flex flex-col justify-center`}
                         style={{ 
                           top: `${topPosition + 4}px`, // 4px offset for centering in 40px slot
-                          height: `${cardHeight}px`, // Dynamic height based on duration
+                          height: `${Math.max(height, 24)}px`, // Dynamic height based on duration
                         }}
                         onClick={() => handleClassClick(cls)}
                       >
@@ -1496,7 +1502,7 @@ const Calendar = () => {
                             <div className="text-xs text-opacity-80 leading-tight mt-0.5">
                               {cls.student}
                             </div>
-                            {duration > 1 && (
+                            {durationMinutes > 60 && (
                               <div className="text-xs text-opacity-60 leading-tight mt-0.5">
                                 {cls.startTime} - {cls.endTime}
                               </div>
