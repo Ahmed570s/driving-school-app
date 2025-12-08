@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { PageLayout } from "@/components/ui/page-layout";
 import { Button } from "@/components/ui/button";
 import { Plus, ChevronLeft, ChevronRight, Phone, Clock, Users, Bookmark, UserRound, Calendar as CalendarIcon, AlertTriangle, Check, ChevronsUpDown, Loader2, RefreshCw, Edit, Save, X, Trash2, Lock } from "lucide-react";
@@ -119,6 +119,10 @@ const Calendar = () => {
       endDate: format(endOfMonth(currentMonth), 'yyyy-MM-dd'),
     };
   };
+
+  const getCacheKey = useCallback((startDate: string, endDate: string, instructorId: string) => {
+    return `${startDate}|${endDate}|${instructorId}`;
+  }, []);
   
   // Data state - Replace mock data arrays with real state management
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -186,6 +190,20 @@ const Calendar = () => {
   const [studentTitleLoading, setStudentTitleLoading] = useState(false);
   // Mini calendar month-level class indicators
   const [miniCalendarClasses, setMiniCalendarClasses] = useState<Record<string, number>>({});
+  // Search/filter state with debounce
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  // Simple in-memory cache to avoid repeated API calls for same range/instructor
+  const classesCacheRef = useRef<Map<string, { data: ClassItem[]; timestamp: number }>>(new Map());
+  const CLASS_CACHE_TTL_MS = 2 * 60 * 1000;
+
+  // Debounce search input to avoid frequent filtering/re-renders
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim().toLowerCase());
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
   
   // ============================================================================
   // DATA FETCHING - Load real data from services
@@ -306,6 +324,21 @@ const Calendar = () => {
           return;
         }
 
+        const cacheKey = getCacheKey(startDate, endDate, selectedInstructorId);
+        const cached = classesCacheRef.current.get(cacheKey);
+        const isFresh = cached && (Date.now() - cached.timestamp < CLASS_CACHE_TTL_MS);
+
+        if (cached) {
+          setClasses(cached.data);
+          if (isFresh) {
+            console.log(`♻️ Using cached classes (${cached.data.length}) for ${startDate} - ${endDate}`);
+            setLoading(false);
+            return;
+          } else {
+            console.log(`ℹ️ Using stale cache while refreshing (${cached.data.length})`);
+          }
+        }
+
         const classesData = await getClasses({
           startDate,
           endDate,
@@ -313,6 +346,7 @@ const Calendar = () => {
         });
         
         setClasses(classesData);
+        classesCacheRef.current.set(cacheKey, { data: classesData, timestamp: Date.now() });
         
         console.log(`✅ Loaded ${classesData.length} classes for view: ${viewMode}`);
       } catch (error) {
@@ -392,6 +426,12 @@ const Calendar = () => {
         return;
       }
 
+      const cacheKey = getCacheKey(startDate, endDate, selectedInstructorId);
+      const cached = classesCacheRef.current.get(cacheKey);
+      if (cached) {
+        setClasses(cached.data);
+      }
+
       const classesData = await getClasses({
         startDate,
         endDate,
@@ -399,6 +439,7 @@ const Calendar = () => {
       });
       
       setClasses(classesData);
+      classesCacheRef.current.set(cacheKey, { data: classesData, timestamp: Date.now() });
       console.log(`✅ Refreshed ${classesData.length} classes`);
     } catch (error) {
       console.error('❌ Failed to refresh classes:', error);
@@ -414,10 +455,13 @@ const Calendar = () => {
   // CALENDAR CALCULATIONS
   // ============================================================================
   
-  // Get days for current month
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  // Get days for current month (memoized)
+  const monthStart = useMemo(() => startOfMonth(currentMonth), [currentMonth]);
+  const monthEnd = useMemo(() => endOfMonth(currentMonth), [currentMonth]);
+  const monthDays = useMemo(
+    () => eachDayOfInterval({ start: monthStart, end: monthEnd }),
+    [monthStart, monthEnd]
+  );
   
   // Navigation functions
   const prevMonth = () => {
@@ -450,17 +494,28 @@ const Calendar = () => {
     return instructor ? `${instructor.firstName} ${instructor.lastName}` : "Select Instructor";
   };
   
-  // Filter classes by instructor (always filtered since no "All Instructors" option)
-  const getFilteredClasses = () => {
-    return classes; // Classes are already filtered by instructor in the API call
-  };
+  // Filter classes by search query (class name, student, group, instructor, notes)
+  const filteredClasses = useMemo(() => {
+    if (!debouncedSearch) return classes;
+    return classes.filter((cls) => {
+      const haystack = [
+        cls.className,
+        cls.student,
+        cls.group,
+        cls.instructor,
+        cls.notes,
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(debouncedSearch);
+    });
+  }, [classes, debouncedSearch]);
   
   // Get classes for a specific day
-  const getClassesForDay = (day: Date) => {
+  const getClassesForDay = useCallback((day: Date) => {
     const dateString = format(day, 'yyyy-MM-dd');
-    const filteredClasses = getFilteredClasses();
     return filteredClasses.filter(cls => cls.date === dateString);
-  };
+  }, [filteredClasses]);
   
   // Get classes for selected date in form
   const getClassesForSelectedDate = () => {
@@ -468,16 +523,16 @@ const Calendar = () => {
   };
 
   // Get instructor name by ID
-  const getInstructorNameById = (instructorId: string) => {
+  const getInstructorNameById = useCallback((instructorId: string) => {
     const instructor = instructors.find(inst => inst.id === instructorId);
     return instructor ? `${instructor.firstName} ${instructor.lastName}` : "Unknown Instructor";
-  };
+  }, [instructors]);
 
   // Get group name by ID
-  const getGroupNameById = (groupId: string) => {
+  const getGroupNameById = useCallback((groupId: string) => {
     const group = groups.find(grp => grp.id === groupId);
     return group ? group.name : "Unknown Group";
-  };
+  }, [groups]);
   
   // Check instructor availability
   const checkInstructorConflict = () => {
@@ -775,14 +830,46 @@ const Calendar = () => {
     }
       
       console.log('📝 Creating new class...', formData);
-      
+
+      // Build optimistic class for immediate UI feedback
+      const optimisticId = `temp-${Date.now()}`;
+      const selectedStudentName = formData.selectedStudents[0] || "Student";
+      const selectedStudent = students.find(s => s.name === selectedStudentName);
+      const groupName = formData.selectedGroup ? getGroupNameById(formData.selectedGroup) : "";
+
+      const optimisticClass: ClassItem = {
+        id: optimisticId,
+        student: formData.type === "Practical" ? selectedStudentName : groupName || "Group",
+        date: formData.date,
+        startTime: formData.startTime,
+        endTime: calculateEndTime(formData.startTime, formData.duration),
+        phone: selectedStudent?.phone || "",
+        instructor: getInstructorNameById(formData.instructor),
+        className: formData.title || "New Class",
+        type: formData.type as 'Theory' | 'Practical',
+        group: formData.type === "Theory" ? groupName : "",
+        duration: `${formData.duration} minutes`,
+        notes: formData.notes,
+        instructorId: formData.instructor,
+        studentId: formData.type === "Practical" ? (selectedStudent?.id || null) : null,
+        groupId: formData.type === "Theory" ? (formData.selectedGroup || null) : null,
+        location: formData.location || "Main Campus",
+        cost: formData.cost ?? null,
+        status: 'scheduled',
+      };
+
+      setClasses(prev => [...prev, optimisticClass]);
+
       // Prepare class data for creation - formData already matches ClassFormData interface
       const classData = formData;
       
       // Create the class
       const newClass = await createClass(classData);
+
+      // Replace optimistic entry with real data
+      setClasses(prev => prev.map(cls => cls.id === optimisticId ? newClass : cls));
     
-    // Show success message
+      // Show success message
       toast({
         title: "Class Created Successfully",
         description: `${newClass.type} class scheduled for ${format(new Date(formData.date), 'MMM d, yyyy')} at ${formData.startTime}.`,
@@ -797,12 +884,14 @@ const Calendar = () => {
       // Refresh classes data (will load classes for the correct instructor)
       await refreshClasses();
     
-    // Reset form and close modal
+      // Reset form and close modal
       resetForm();
       setModalOpen(false);
       
     } catch (error) {
       console.error('❌ Failed to create class:', error);
+      // Roll back optimistic class if it exists
+      setClasses(prev => prev.filter(cls => !cls.id.startsWith('temp-')));
       toast({
         title: "Error Creating Class",
         description: error instanceof Error ? error.message : "Failed to create class. Please try again.",
@@ -1055,10 +1144,16 @@ const Calendar = () => {
   };
   
   // Generate weekly view days (current week)
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i)),
+    [currentWeekStart]
+  );
   
   // Time slots for weekly view (8:00 AM to 8:00 PM in 1-hour steps)
-  const timeSlots = Array.from({ length: 13 }, (_, i) => `${i + 8}:00`);
+  const timeSlots = useMemo(
+    () => Array.from({ length: 13 }, (_, i) => `${i + 8}:00`),
+    []
+  );
   
   // Parse time string to minutes from midnight
   const parseTimeToMinutes = (timeString: string): number => {
@@ -1163,6 +1258,7 @@ const Calendar = () => {
   // Handle class update
   const handleUpdateClass = async () => {
     if (!selectedClass) return;
+    const previousClasses = classes;
 
     try {
       setIsUpdatingClass(true);
@@ -1179,6 +1275,36 @@ const Calendar = () => {
       }
 
       console.log('📝 Updating class...', selectedClass.id, editFormData);
+
+      const optimisticEndTime = calculateEndTime(editFormData.startTime, editFormData.duration);
+      const optimisticStudentName = selectedClass.type === "Practical"
+        ? (editFormData.selectedStudents[0] || selectedClass.student)
+        : selectedClass.student;
+      setClasses(prev =>
+        prev.map(cls =>
+          cls.id === selectedClass.id
+            ? {
+                ...cls,
+                className: editFormData.title,
+                date: editFormData.date,
+                startTime: editFormData.startTime,
+                endTime: optimisticEndTime,
+                duration: `${editFormData.duration} minutes`,
+                instructorId: editFormData.instructor,
+                instructor: getInstructorNameById(editFormData.instructor),
+                student: optimisticStudentName,
+                studentId: cls.type === "Practical"
+                  ? (editFormData.selectedStudents[0]
+                      ? students.find(s => s.name === editFormData.selectedStudents[0])?.id || null
+                      : cls.studentId)
+                  : null,
+                groupId: cls.type === "Theory" ? editFormData.selectedGroup : null,
+                group: cls.type === "Theory" ? getGroupNameById(editFormData.selectedGroup) : cls.group,
+                notes: editFormData.notes,
+              }
+            : cls
+        )
+      );
 
       // Prepare update data (type is read-only, so we keep the existing type)
       const updateData: Partial<ClassItem> = {
@@ -1215,6 +1341,7 @@ const Calendar = () => {
 
     } catch (error) {
       console.error('❌ Failed to update class:', error);
+      setClasses(previousClasses);
       
       // More detailed error message
       let errorMessage = "Failed to update class. Please try again.";
@@ -1283,11 +1410,14 @@ const Calendar = () => {
   // Handle class deletion
   const handleDeleteClass = async () => {
     if (!selectedClass) return;
+    const previousClasses = classes;
 
     try {
       setIsDeletingClass(true);
 
       console.log('🗑️ Deleting class...', selectedClass.id);
+
+      setClasses(prev => prev.filter(cls => cls.id !== selectedClass.id));
 
       // Delete the class
       await deleteClass(selectedClass.id);
@@ -1309,6 +1439,8 @@ const Calendar = () => {
 
     } catch (error) {
       console.error('❌ Failed to delete class:', error);
+      // Roll back optimistic removal
+      setClasses(previousClasses);
       
       let errorMessage = "Failed to delete class. Please try again.";
       if (error instanceof Error) {
@@ -1740,7 +1872,13 @@ const Calendar = () => {
             </div>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3 items-center">
+          <Input
+            placeholder="Search classes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-48"
+          />
           {/* 🧪 TEMPORARY TEST BUTTON - Remove this later */}
           <Button variant="outline" onClick={testServices}>
             🧪 Test Services
