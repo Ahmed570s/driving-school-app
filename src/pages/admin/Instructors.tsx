@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { PageLayout } from "@/components/ui/page-layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,143 +38,71 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { 
-  Pencil, Trash2, UserPlus, Search, Phone, Mail, Calendar, Car, Star, Clock, 
-  Briefcase, MapPin, Award, FileText, UserCheck, Eye, User
+  Pencil, Trash2, UserPlus, Search, Phone, Mail, Calendar, Award, Eye, Loader2, User 
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
-
-// Define instructor type
-interface Instructor {
-  id: string;
-  name: string;
-  email: string;
-  licenseNumber: string;
-  phone: string;
-  avatar?: string;
-  address: string;
-  specialties: string[];
-  rating: number;
-  joinDate: string;
-  classesTaught: number;
-  availability: string;
-  certifications: string[];
-  bio: string;
-  vehicleAssigned: string;
-}
-
-// Dummy instructors data
-const dummyInstructors: Instructor[] = [
-  {
-    id: "i1",
-    name: "Mike Brown",
-    email: "mike.brown@drivingschool.com",
-    licenseNumber: "INS-2021-1458",
-    phone: "(555) 123-4567",
-    avatar: "https://i.pravatar.cc/150?img=68",
-    address: "123 Main Street, Cityville, ST 12345",
-    specialties: ["Highway Driving", "Defensive Driving", "Parallel Parking"],
-    rating: 4.8,
-    joinDate: "2019-05-12",
-    classesTaught: 852,
-    availability: "Mon-Fri, 9AM-5PM",
-    certifications: ["Advanced Driving Instructor", "Defensive Driving Specialist"],
-    bio: "Mike has over 10 years of experience teaching people of all ages to drive. He specializes in helping anxious drivers feel comfortable behind the wheel.",
-    vehicleAssigned: "Toyota Corolla (Vehicle #2)"
-  },
-  {
-    id: "i2",
-    name: "Lisa Taylor",
-    email: "lisa.taylor@drivingschool.com",
-    licenseNumber: "INS-2020-3892",
-    phone: "(555) 234-5678",
-    avatar: "https://i.pravatar.cc/150?img=5",
-    address: "456 Oak Drive, Townsville, ST 23456",
-    specialties: ["City Driving", "Night Driving", "Driver Theory"],
-    rating: 4.9,
-    joinDate: "2020-03-15",
-    classesTaught: 631,
-    availability: "Tue-Sat, 10AM-6PM",
-    certifications: ["Master Driving Instructor", "Theory Specialist"],
-    bio: "Lisa is known for her patience and clear instruction. She has a background in education and applies effective teaching methods to help students learn quickly.",
-    vehicleAssigned: "Honda Civic (Vehicle #3)"
-  },
-  {
-    id: "i3",
-    name: "James Wilson",
-    email: "james.wilson@drivingschool.com",
-    licenseNumber: "INS-2022-7251",
-    phone: "(555) 345-6789",
-    avatar: "https://i.pravatar.cc/150?img=11",
-    address: "789 Pine Road, Villageton, ST 34567",
-    specialties: ["Emergency Maneuvers", "Highway Merging", "Roundabouts"],
-    rating: 4.7,
-    joinDate: "2022-01-08",
-    classesTaught: 413,
-    availability: "Mon-Wed & Sat-Sun, 8AM-4PM",
-    certifications: ["Emergency Maneuver Specialist", "Commercial Driver Trainer"],
-    bio: "James joined our team after 15 years as a professional driver. His real-world experience makes him excellent at teaching practical driving skills and safety maneuvers.",
-    vehicleAssigned: "Ford Focus (Vehicle #5)"
-  },
-  {
-    id: "i4",
-    name: "Sarah Johnson",
-    email: "sarah.johnson@drivingschool.com",
-    licenseNumber: "INS-2021-9023",
-    phone: "(555) 456-7890",
-    avatar: "https://i.pravatar.cc/150?img=9",
-    address: "321 Elm Court, Hamletville, ST 45678",
-    specialties: ["Teen Drivers", "Test Preparation", "Parking Techniques"],
-    rating: 4.9,
-    joinDate: "2021-09-20",
-    classesTaught: 572,
-    availability: "Wed-Sun, 11AM-7PM",
-    certifications: ["Youth Driver Specialist", "Test Prep Expert"],
-    bio: "Sarah has a special talent for working with teenage drivers and helping them build confidence. She's known for her high pass rate for road tests.",
-    vehicleAssigned: "Nissan Sentra (Vehicle #7)"
-  },
-  {
-    id: "i5",
-    name: "Robert Chen",
-    email: "robert.chen@drivingschool.com",
-    licenseNumber: "INS-2019-4587",
-    phone: "(555) 567-8901",
-    avatar: "https://i.pravatar.cc/150?img=15",
-    address: "654 Maple Avenue, Boroughtown, ST 56789",
-    specialties: ["Winter Driving", "Mountain Roads", "Vehicle Handling"],
-    rating: 4.6,
-    joinDate: "2019-11-05",
-    classesTaught: 924,
-    availability: "Mon-Fri, 7AM-3PM",
-    certifications: ["All-Weather Driving Expert", "Advanced Vehicle Control Specialist"],
-    bio: "Robert excels at teaching advanced vehicle control and handling in challenging conditions. He previously worked as a driving instructor for law enforcement.",
-    vehicleAssigned: "Subaru Impreza (Vehicle #8)"
-  }
-];
+import { Instructor, InstructorInput, getInstructors, createInstructor, updateInstructor, deleteInstructor } from "@/services/instructors";
 
 const InstructorsSection = () => {
-  const [instructors, setInstructors] = useState<Instructor[]>(dummyInstructors);
+  const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [selectedInstructor, setSelectedInstructor] = useState<Instructor | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState<boolean>(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
   // Form state for add/edit
-  const [formData, setFormData] = useState<Partial<Instructor>>({
-    name: "",
+  const [formData, setFormData] = useState<Partial<InstructorInput> & { id?: string }>({
+    firstName: "",
+    lastName: "",
     email: "",
-    licenseNumber: "",
     phone: "",
-    address: "",
-    bio: "",
-    availability: "",
-    vehicleAssigned: ""
+    whatsapp: "",
+    hireDate: "",
+    status: "active",
+    employeeId: "",
+    licenseNumber: "",
+    certificationExpiry: "",
   });
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        const data = await getInstructors();
+        setInstructors(data);
+      } catch (error: any) {
+        toast({
+          title: "Error loading instructors",
+          description: error?.message || "Failed to load instructors",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
   
   // Filter instructors based on search query
-  const filteredInstructors = instructors.filter(instructor => 
-    instructor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    instructor.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    instructor.licenseNumber.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredInstructors = useMemo(
+    () =>
+      instructors.filter((instructor) => {
+        const haystack = [
+          instructor.fullName,
+          instructor.firstName,
+          instructor.lastName,
+          instructor.email,
+          instructor.licenseNumber,
+          instructor.status,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(searchQuery.toLowerCase());
+      }),
+    [instructors, searchQuery]
   );
 
   // Handle instructor selection for profile view
@@ -190,89 +118,181 @@ const InstructorsSection = () => {
   
   // Setup edit form with instructor data
   const handleEditClick = (instructor: Instructor) => {
-    setFormData(instructor);
+    setFormData({
+      id: instructor.id,
+      firstName: instructor.firstName,
+      lastName: instructor.lastName,
+      email: instructor.email,
+      phone: instructor.phone,
+      whatsapp: instructor.whatsapp,
+      hireDate: instructor.hireDate,
+      status: instructor.status,
+      employeeId: instructor.employeeId,
+      licenseNumber: instructor.licenseNumber,
+      certificationExpiry: instructor.certificationExpiry,
+    });
     setIsEditDialogOpen(true);
   };
   
   // Reset form data
   const resetForm = () => {
     setFormData({
-      name: "",
+      id: undefined,
+      firstName: "",
+      lastName: "",
       email: "",
       licenseNumber: "",
       phone: "",
-      address: "",
-      bio: "",
-      availability: "",
-      vehicleAssigned: ""
+      whatsapp: "",
+      hireDate: "",
+      status: "active",
+      employeeId: "",
+      certificationExpiry: "",
     });
   };
   
   // Add new instructor
-  const handleAddInstructor = () => {
-    const newInstructor: Instructor = {
-      id: `i${instructors.length + 1}`,
-      name: formData.name || "New Instructor",
-      email: formData.email || "email@example.com",
-      licenseNumber: formData.licenseNumber || "INS-XXXX-XXXX",
-      phone: formData.phone || "(555) XXX-XXXX",
-      address: formData.address || "Address",
-      specialties: ["General Driving"],
-      rating: 5.0,
-      joinDate: new Date().toISOString().split('T')[0],
-      classesTaught: 0,
-      availability: formData.availability || "Not set",
-      certifications: ["Standard Certification"],
-      bio: formData.bio || "No bio provided",
-      vehicleAssigned: formData.vehicleAssigned || "Not assigned"
-    };
-    
-    setInstructors([...instructors, newInstructor]);
-    setIsAddDialogOpen(false);
-    resetForm();
-    
-    toast({
-      title: "Instructor Added",
-      description: `${newInstructor.name} has been added to the roster.`
-    });
+  const handleAddInstructor = async () => {
+    try {
+      setSaving(true);
+      if (!formData.firstName || !formData.lastName || !formData.email || !formData.hireDate || !formData.status) {
+        toast({
+          title: "Missing required fields",
+          description: "First name, last name, email, status, and hire date are required.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const input: InstructorInput = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        whatsapp: formData.whatsapp,
+        hireDate: formData.hireDate,
+        status: (formData.status as any) || "active",
+        employeeId: formData.employeeId,
+        licenseNumber: formData.licenseNumber,
+        certificationExpiry: formData.certificationExpiry,
+        specializations: [],
+      };
+      const optimisticId = `temp-${Date.now()}`;
+      const optimistic: Instructor = {
+        id: optimisticId,
+        profileId: "",
+        employeeId: input.employeeId || "",
+        fullName: `${input.firstName} ${input.lastName}`,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email,
+        phone: input.phone || "",
+        whatsapp: input.whatsapp || "",
+        status: input.status || "active",
+        hireDate: input.hireDate,
+        licenseNumber: input.licenseNumber || "",
+        certificationExpiry: input.certificationExpiry || "",
+        specializations: input.specializations || [],
+        theoryHours: 0,
+        practicalHours: 0,
+        totalHours: 0,
+        avatar: "",
+        address: {
+          street: "",
+          apartment: "",
+          city: "",
+          postalCode: "",
+          province: "",
+          country: "Canada",
+        },
+        isActive: true,
+      };
+      setInstructors((prev) => [optimistic, ...prev]);
+      const created = await createInstructor(input);
+      setInstructors((prev) => prev.map(i => i.id === optimisticId ? created : i));
+      setIsAddDialogOpen(false);
+      resetForm();
+      toast({
+        title: "Instructor Added",
+        description: `${created.fullName} has been added.`,
+      });
+    } catch (error: any) {
+      setInstructors((prev) => prev.filter(i => !i.id.startsWith('temp-')));
+      toast({
+        title: "Error adding instructor",
+        description: error?.message || "Failed to add instructor",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
   
   // Update existing instructor
-  const handleUpdateInstructor = () => {
+  const handleUpdateInstructor = async () => {
     if (!formData.id) return;
-    
-    const updatedInstructors = instructors.map(instructor => 
-      instructor.id === formData.id ? { ...instructor, ...formData } : instructor
-    );
-    
-    setInstructors(updatedInstructors);
-    setIsEditDialogOpen(false);
-    
-    // Update selected instructor if currently viewing
-    if (selectedInstructor && selectedInstructor.id === formData.id) {
-      setSelectedInstructor({ ...selectedInstructor, ...formData });
+    try {
+      setSaving(true);
+      const updates: Partial<InstructorInput> = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        whatsapp: formData.whatsapp,
+        hireDate: formData.hireDate,
+        status: formData.status as any,
+        employeeId: formData.employeeId,
+        licenseNumber: formData.licenseNumber,
+      certificationExpiry: formData.certificationExpiry,
+      };
+      const updated = await updateInstructor(formData.id, updates);
+      setInstructors((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+      if (selectedInstructor?.id === updated.id) {
+        setSelectedInstructor(updated);
+      }
+      setIsEditDialogOpen(false);
+      toast({
+        title: "Instructor Updated",
+        description: `${updated.fullName} has been updated.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error updating instructor",
+        description: error?.message || "Failed to update instructor",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
-    
-    toast({
-      title: "Instructor Updated",
-      description: `${formData.name}'s information has been updated.`
-    });
   };
   
   // Delete instructor
-  const handleDeleteInstructor = (id: string) => {
-    const updatedInstructors = instructors.filter(instructor => instructor.id !== id);
-    setInstructors(updatedInstructors);
-    
-    // Clear selected instructor if deleted
-    if (selectedInstructor && selectedInstructor.id === id) {
-      setSelectedInstructor(null);
+  const handleDeleteInstructor = async (id: string) => {
+    try {
+      setDeletingId(id);
+      const previous = instructors;
+      setInstructors((prev) => prev.filter((i) => i.id !== id));
+      try {
+        await deleteInstructor(id);
+      } catch (err) {
+        setInstructors(previous);
+        throw err;
+      }
+      if (selectedInstructor?.id === id) {
+        setSelectedInstructor(null);
+      }
+      toast({
+        title: "Instructor Deleted",
+        description: "The instructor has been removed.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error deleting instructor",
+        description: error?.message || "Failed to delete instructor",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingId(null);
     }
-    
-    toast({
-      title: "Instructor Deleted",
-      description: "The instructor has been removed from the system."
-    });
   };
   
   return (
@@ -305,6 +325,12 @@ const InstructorsSection = () => {
               <CardDescription>View and manage driving instructors</CardDescription>
             </CardHeader>
             <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Loading instructors...
+                </div>
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -327,10 +353,15 @@ const InstructorsSection = () => {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <Avatar className="h-8 w-8">
-                              <AvatarImage src={instructor.avatar} alt={instructor.name} />
-                              <AvatarFallback>{instructor.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                              <AvatarImage src={instructor.avatar} alt={instructor.fullName} />
+                              <AvatarFallback>
+                                {(instructor.fullName || `${instructor.firstName} ${instructor.lastName}` || "N")
+                                  .split(" ")
+                                  .map(n => n[0])
+                                  .join("")}
+                              </AvatarFallback>
                             </Avatar>
-                            {instructor.name}
+                            {instructor.fullName}
                           </div>
                         </TableCell>
                         <TableCell>{instructor.email}</TableCell>
@@ -353,15 +384,19 @@ const InstructorsSection = () => {
                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                <Button variant="ghost" size="icon" disabled={deletingId === instructor.id}>
+                                  {deletingId === instructor.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  )}
                                 </Button>
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Delete Instructor</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Are you sure you want to delete {instructor.name}? This action cannot be undone.
+                                    Are you sure you want to delete {instructor.fullName}? This action cannot be undone.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -382,143 +417,72 @@ const InstructorsSection = () => {
                   )}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
           </Card>
           
           {/* Right column - Instructor Profile */}
-          <Card className="w-full lg:w-1/3 h-fit">
+          <Card className="w-full lg:w-1/3 h-fit mx-auto">
             {selectedInstructor ? (
               <>
                 <CardHeader>
-                  <div className="flex justify-between items-start">
+                  <div className="flex flex-col items-center gap-2">
                     <div className="flex flex-col items-center gap-2">
                       <Avatar className="h-16 w-16">
-                        <AvatarImage src={selectedInstructor.avatar} alt={selectedInstructor.name} />
+                        <AvatarImage src={selectedInstructor.avatar || ""} alt={selectedInstructor.fullName} />
                         <AvatarFallback className="text-lg">
-                          {selectedInstructor.name.split(' ').map(n => n[0]).join('')}
+                          {(selectedInstructor.fullName || `${selectedInstructor.firstName} ${selectedInstructor.lastName}`)
+                            .split(" ")
+                            .map(n => n[0])
+                            .join("")}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="text-center">
-                        <CardTitle>{selectedInstructor.name}</CardTitle>
-                        <div className="flex items-center justify-center gap-1 mt-1">
-                          <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
-                          <span className="text-sm font-medium">{selectedInstructor.rating}</span>
+                      <div className="w-full flex flex-col items-center text-center space-y-1">
+                        <CardTitle className="text-center">{selectedInstructor.fullName}</CardTitle>
+                        <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+                          <Mail className="h-4 w-4" />
+                          {selectedInstructor.email}
+                        </div>
+                        <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+                          <Phone className="h-4 w-4" />
+                          {selectedInstructor.phone || "No phone"}
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="icon"
-                        onClick={() => handleEditClick(selectedInstructor)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button 
-                            variant="outline" 
-                            size="icon"
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Instructor</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete {selectedInstructor.name}? This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction 
-                              onClick={() => handleDeleteInstructor(selectedInstructor.id)}
-                              className="bg-destructive text-destructive-foreground"
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                    <Badge variant="secondary" className="capitalize self-center mt-1">
+                      {selectedInstructor.status}
+                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-6">
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-medium text-muted-foreground">Contact Information</h3>
-                      <Separator />
-                      <div className="grid grid-cols-1 gap-3 pt-2">
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{selectedInstructor.email}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{selectedInstructor.phone}</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                          <span className="text-sm">{selectedInstructor.address}</span>
-                        </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">Hire Date</p>
+                        <p className="text-sm text-muted-foreground">{selectedInstructor.hireDate}</p>
                       </div>
                     </div>
-                    
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-medium text-muted-foreground">Instructor Details</h3>
-                      <Separator />
-                      <div className="grid grid-cols-1 gap-3 pt-2">
-                        <div className="flex items-center gap-2">
-                          <UserCheck className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">License: {selectedInstructor.licenseNumber}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">Joined: {new Date(selectedInstructor.joinDate).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">Available: {selectedInstructor.availability}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Car className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{selectedInstructor.vehicleAssigned}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Briefcase className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{selectedInstructor.classesTaught} classes taught</span>
-                        </div>
+                    <div className="flex items-center gap-2">
+                      <Award className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">License #</p>
+                        <p className="text-sm text-muted-foreground">{selectedInstructor.licenseNumber || "—"}</p>
                       </div>
                     </div>
-                    
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-medium text-muted-foreground">Specialties</h3>
-                      <Separator />
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        {selectedInstructor.specialties.map((specialty, index) => (
-                          <Badge key={index} variant="secondary">{specialty}</Badge>
-                        ))}
+                    <div className="flex items-center gap-2">
+                      <Award className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">Cert Expiry</p>
+                        <p className="text-sm text-muted-foreground">{selectedInstructor.certificationExpiry || "—"}</p>
                       </div>
                     </div>
-                    
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-medium text-muted-foreground">Certifications</h3>
-                      <Separator />
-                      <div className="flex flex-col gap-2 pt-2">
-                        {selectedInstructor.certifications.map((cert, index) => (
-                          <div key={index} className="flex items-center gap-2">
-                            <Award className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">{cert}</span>
-                          </div>
-                        ))}
+                    <div className="flex items-center gap-2">
+                      <Award className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">Employee ID</p>
+                        <p className="text-sm text-muted-foreground">{selectedInstructor.employeeId}</p>
                       </div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-medium text-muted-foreground">Biography</h3>
-                      <Separator />
-                      <p className="text-sm pt-2">{selectedInstructor.bio}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -549,24 +513,44 @@ const InstructorsSection = () => {
           <div className="grid gap-6 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="firstName">First Name *</Label>
                 <Input
-                  id="name"
-                  name="name"
-                  value={formData.name || ''}
+                  id="firstName"
+                  name="firstName"
+                  value={formData.firstName || ""}
                   onChange={handleInputChange}
-                  placeholder="John Doe"
+                  placeholder="John"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="lastName">Last Name *</Label>
+                <Input
+                  id="lastName"
+                  name="lastName"
+                  value={formData.lastName || ""}
+                  onChange={handleInputChange}
+                  placeholder="Doe"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
                 <Input
                   id="email"
                   name="email"
                   type="email"
-                  value={formData.email || ''}
+                  value={formData.email || ""}
                   onChange={handleInputChange}
                   placeholder="john.doe@example.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="hireDate">Hire Date *</Label>
+                <Input
+                  id="hireDate"
+                  name="hireDate"
+                  type="date"
+                  value={formData.hireDate || ""}
+                  onChange={handleInputChange}
                 />
               </div>
               <div className="space-y-2">
@@ -574,9 +558,19 @@ const InstructorsSection = () => {
                 <Input
                   id="licenseNumber"
                   name="licenseNumber"
-                  value={formData.licenseNumber || ''}
+                  value={formData.licenseNumber || ""}
                   onChange={handleInputChange}
                   placeholder="INS-XXXX-XXXX"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="certificationExpiry">Certification Expiry</Label>
+                <Input
+                  id="certificationExpiry"
+                  name="certificationExpiry"
+                  type="date"
+                  value={formData.certificationExpiry || ""}
+                  onChange={handleInputChange}
                 />
               </div>
               <div className="space-y-2">
@@ -584,56 +578,31 @@ const InstructorsSection = () => {
                 <Input
                   id="phone"
                   name="phone"
-                  value={formData.phone || ''}
+                  value={formData.phone || ""}
                   onChange={handleInputChange}
                   placeholder="(555) XXX-XXXX"
                 />
               </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="address">Address</Label>
-              <Input
-                id="address"
-                name="address"
-                value={formData.address || ''}
-                onChange={handleInputChange}
-                placeholder="123 Main St, City, State 12345"
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="availability">Availability</Label>
+                <Label htmlFor="whatsapp">WhatsApp</Label>
                 <Input
-                  id="availability"
-                  name="availability"
-                  value={formData.availability || ''}
+                  id="whatsapp"
+                  name="whatsapp"
+                  value={formData.whatsapp || ""}
                   onChange={handleInputChange}
-                  placeholder="Mon-Fri, 9AM-5PM"
+                  placeholder="(555) XXX-XXXX"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="vehicleAssigned">Vehicle Assignment</Label>
+                <Label htmlFor="employeeId">Employee ID</Label>
                 <Input
-                  id="vehicleAssigned"
-                  name="vehicleAssigned"
-                  value={formData.vehicleAssigned || ''}
+                  id="employeeId"
+                  name="employeeId"
+                  value={formData.employeeId || ""}
                   onChange={handleInputChange}
-                  placeholder="Toyota Corolla (Vehicle #1)"
+                  placeholder="EMP-001"
                 />
               </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="bio">Biography</Label>
-              <Input
-                id="bio"
-                name="bio"
-                value={formData.bio || ''}
-                onChange={handleInputChange}
-                placeholder="Brief instructor biography or notes"
-              />
             </div>
           </div>
           
@@ -661,21 +630,40 @@ const InstructorsSection = () => {
           <div className="grid gap-6 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="edit-name">Full Name</Label>
+                <Label htmlFor="edit-firstName">First Name *</Label>
                 <Input
-                  id="edit-name"
-                  name="name"
-                  value={formData.name || ''}
+                  id="edit-firstName"
+                  name="firstName"
+                  value={formData.firstName || ''}
                   onChange={handleInputChange}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-email">Email</Label>
+                <Label htmlFor="edit-lastName">Last Name *</Label>
+                <Input
+                  id="edit-lastName"
+                  name="lastName"
+                  value={formData.lastName || ''}
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-email">Email *</Label>
                 <Input
                   id="edit-email"
                   name="email"
                   type="email"
                   value={formData.email || ''}
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-hireDate">Hire Date *</Label>
+                <Input
+                  id="edit-hireDate"
+                  name="hireDate"
+                  type="date"
+                  value={formData.hireDate || ''}
                   onChange={handleInputChange}
                 />
               </div>
@@ -689,6 +677,16 @@ const InstructorsSection = () => {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="edit-certificationExpiry">Certification Expiry</Label>
+                <Input
+                  id="edit-certificationExpiry"
+                  name="certificationExpiry"
+                  type="date"
+                  value={formData.certificationExpiry || ''}
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="edit-phone">Phone Number</Label>
                 <Input
                   id="edit-phone"
@@ -697,47 +695,34 @@ const InstructorsSection = () => {
                   onChange={handleInputChange}
                 />
               </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="edit-address">Address</Label>
-              <Input
-                id="edit-address"
-                name="address"
-                value={formData.address || ''}
-                onChange={handleInputChange}
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="edit-availability">Availability</Label>
+                <Label htmlFor="edit-whatsapp">WhatsApp</Label>
                 <Input
-                  id="edit-availability"
-                  name="availability"
-                  value={formData.availability || ''}
+                  id="edit-whatsapp"
+                  name="whatsapp"
+                  value={formData.whatsapp || ''}
                   onChange={handleInputChange}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-vehicleAssigned">Vehicle Assignment</Label>
+                <Label htmlFor="edit-employeeId">Employee ID</Label>
                 <Input
-                  id="edit-vehicleAssigned"
-                  name="vehicleAssigned"
-                  value={formData.vehicleAssigned || ''}
+                  id="edit-employeeId"
+                  name="employeeId"
+                  value={formData.employeeId || ''}
                   onChange={handleInputChange}
                 />
               </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="edit-bio">Biography</Label>
-              <Input
-                id="edit-bio"
-                name="bio"
-                value={formData.bio || ''}
-                onChange={handleInputChange}
-              />
+              <div className="space-y-2">
+                <Label htmlFor="edit-status">Status</Label>
+                <Input
+                  id="edit-status"
+                  name="status"
+                  value={formData.status || "active"}
+                  onChange={handleInputChange}
+                  placeholder="active | inactive | on_leave"
+                />
+              </div>
             </div>
           </div>
           
@@ -745,8 +730,8 @@ const InstructorsSection = () => {
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleUpdateInstructor}>
-              Save Changes
+            <Button onClick={handleUpdateInstructor} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

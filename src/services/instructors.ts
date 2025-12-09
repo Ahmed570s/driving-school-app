@@ -89,6 +89,20 @@ export interface InstructorFilters {
   isActive?: boolean;
 }
 
+export interface InstructorInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  whatsapp?: string;
+  hireDate: string; // YYYY-MM-DD
+  status?: 'active' | 'inactive' | 'on_leave';
+  employeeId?: string;
+  licenseNumber?: string;
+  certificationExpiry?: string;
+  specializations?: string[];
+}
+
 // ============================================================================
 // HELPER FUNCTIONS - Convert database format to UI format
 // ============================================================================
@@ -392,6 +406,196 @@ export const getInstructorByProfileId = async (profileId: string): Promise<Instr
 
   } catch (error) {
     console.error('💥 Error in getInstructorByProfileId:', error);
+    throw error;
+  }
+};
+
+// ============================================================================
+// CREATE / UPDATE / DELETE
+// ============================================================================
+
+export const createInstructor = async (input: InstructorInput): Promise<Instructor> => {
+  try {
+    console.log('🆕 Creating instructor...', input);
+
+    // 1) Create profile
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        email: input.email,
+        role: 'instructor',
+        first_name: input.firstName,
+        last_name: input.lastName,
+        phone: input.phone || '',
+        whatsapp: input.whatsapp || input.phone || '',
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (profileError || !profileData) {
+      console.error('❌ Profile creation failed:', profileError);
+      throw new Error(profileError?.message || 'Failed to create profile');
+    }
+
+    // 2) Create instructor row
+    const { data: instructorData, error: instructorError } = await supabase
+      .from('instructors')
+      .insert({
+        profile_id: profileData.id,
+        employee_id: input.employeeId || `EMP-${Date.now()}`,
+        hire_date: input.hireDate,
+        status: input.status || 'active',
+        license_number: input.licenseNumber || null,
+        certification_expiry: input.certificationExpiry || null,
+        specializations: input.specializations || [],
+      })
+      .select(`
+        *,
+        profiles!inner (
+          id,
+          email,
+          role,
+          status,
+          first_name,
+          last_name,
+          phone,
+          whatsapp,
+          avatar_url,
+          street_address,
+          apartment,
+          city,
+          postal_code,
+          province,
+          country,
+          is_active
+        )
+      `)
+      .single();
+
+    if (instructorError || !instructorData) {
+      console.error('❌ Instructor creation failed:', instructorError);
+      throw new Error(instructorError?.message || 'Failed to create instructor');
+    }
+
+    console.log('✅ Instructor created');
+    return convertToInstructor(instructorData as DatabaseInstructor);
+  } catch (error) {
+    console.error('💥 Error in createInstructor:', error);
+    throw error;
+  }
+};
+
+export const updateInstructor = async (id: string, updates: Partial<InstructorInput>): Promise<Instructor> => {
+  try {
+    console.log('✏️ Updating instructor...', id, updates);
+
+    // Fetch current instructor to know profile_id
+    const { data: existing, error: fetchError } = await supabase
+      .from('instructors')
+      .select('profile_id')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existing) {
+      console.error('❌ Failed to find instructor for update:', fetchError);
+      throw new Error('Instructor not found');
+    }
+
+    const profileId = existing.profile_id;
+
+    // Update profile fields if provided
+    const profileUpdates: any = {};
+    if (updates.firstName) profileUpdates.first_name = updates.firstName;
+    if (updates.lastName) profileUpdates.last_name = updates.lastName;
+    if (updates.email) profileUpdates.email = updates.email;
+    if (updates.phone !== undefined) profileUpdates.phone = updates.phone;
+    if (updates.whatsapp !== undefined) profileUpdates.whatsapp = updates.whatsapp;
+
+    if (Object.keys(profileUpdates).length > 0) {
+      const { error: profileUpdateError } = await supabase
+        .from('profiles')
+        .update(profileUpdates)
+        .eq('id', profileId);
+
+      if (profileUpdateError) {
+        console.error('❌ Profile update failed:', profileUpdateError);
+        throw new Error(profileUpdateError.message);
+      }
+    }
+
+    // Update instructor fields
+    const instructorUpdates: any = {};
+    if (updates.status) instructorUpdates.status = updates.status;
+    if (updates.hireDate) instructorUpdates.hire_date = updates.hireDate;
+    if (updates.employeeId) instructorUpdates.employee_id = updates.employeeId;
+    if (updates.licenseNumber !== undefined) instructorUpdates.license_number = updates.licenseNumber || null;
+    if (updates.certificationExpiry !== undefined) instructorUpdates.certification_expiry = updates.certificationExpiry || null;
+    if (updates.specializations !== undefined) instructorUpdates.specializations = updates.specializations;
+
+    if (Object.keys(instructorUpdates).length > 0) {
+      const { error: instructorUpdateError } = await supabase
+        .from('instructors')
+        .update(instructorUpdates)
+        .eq('id', id);
+
+      if (instructorUpdateError) {
+        console.error('❌ Instructor update failed:', instructorUpdateError);
+        throw new Error(instructorUpdateError.message);
+      }
+    }
+
+    // Return fresh record
+    const updated = await getInstructorById(id);
+    if (!updated) throw new Error('Failed to fetch updated instructor');
+    return updated;
+  } catch (error) {
+    console.error('💥 Error in updateInstructor:', error);
+    throw error;
+  }
+};
+
+export const deleteInstructor = async (id: string): Promise<void> => {
+  try {
+    console.log('🗑️ Deleting instructor...', id);
+
+    // Get profile id
+    const { data: existing, error: fetchError } = await supabase
+      .from('instructors')
+      .select('profile_id')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existing) {
+      console.error('❌ Failed to find instructor for deletion:', fetchError);
+      throw new Error('Instructor not found');
+    }
+
+    const profileId = existing.profile_id;
+
+    const { error: instructorDeleteError } = await supabase
+      .from('instructors')
+      .delete()
+      .eq('id', id);
+
+    if (instructorDeleteError) {
+      console.error('❌ Instructor delete failed:', instructorDeleteError);
+      throw new Error(instructorDeleteError.message);
+    }
+
+    const { error: profileDeleteError } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', profileId);
+
+    if (profileDeleteError) {
+      console.error('⚠️ Instructor deleted but profile cleanup failed:', profileDeleteError);
+      throw new Error('Instructor deleted but profile cleanup failed');
+    }
+
+    console.log('✅ Instructor deleted');
+  } catch (error) {
+    console.error('💥 Error in deleteInstructor:', error);
     throw error;
   }
 };
