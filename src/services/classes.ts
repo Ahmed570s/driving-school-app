@@ -752,7 +752,7 @@ export const getClassesByStudent = async (studentId: string): Promise<ClassItem[
     });
 
     attendanceRecords.forEach(record => {
-      if (!record.classes) return;
+      if (!record.classes || Array.isArray(record.classes)) return;
       const classItem = convertToClassItem(record.classes as DatabaseClass);
       classesMap.set(classItem.id, {
         ...classItem,
