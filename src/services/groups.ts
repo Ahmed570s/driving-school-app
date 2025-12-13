@@ -72,6 +72,17 @@ export interface GroupFilters {
   instructorId?: string;
 }
 
+// Input shape for creating/updating groups
+export interface GroupInput {
+  name: string;
+  description?: string;
+  capacity: number;
+  status: 'active' | 'inactive' | 'completed';
+  startDate?: string | null;
+  endDate?: string | null;
+  primaryInstructorId?: string | null;
+}
+
 // ============================================================================
 // HELPER FUNCTIONS - Convert database format to UI format
 // ============================================================================
@@ -318,6 +329,281 @@ export const getGroupById = async (id: string): Promise<Group | null> => {
  */
 export const getGroupsByInstructor = async (instructorId: string): Promise<Group[]> => {
   return getGroups({ instructorId });
+};
+
+// ============================================================================
+// CREATE / UPDATE / DELETE
+// ============================================================================
+
+const groupSelectWithProfile = `
+  *,
+  profiles (
+    id,
+    first_name,
+    last_name,
+    email,
+    phone
+  )
+`;
+
+/**
+ * Create a new group
+ */
+export const createGroup = async (input: GroupInput): Promise<Group> => {
+  try {
+    console.log('🆕 Creating group...', input);
+
+    const payload = {
+      name: input.name,
+      description: input.description || null,
+      capacity: input.capacity,
+      current_enrollment: 0,
+      status: input.status,
+      start_date: input.startDate || null,
+      end_date: input.endDate || null,
+      primary_instructor_id: input.primaryInstructorId || null
+    };
+
+    const { data, error } = await supabase
+      .from('groups')
+      .insert(payload)
+      .select(groupSelectWithProfile)
+      .single();
+
+    if (error) {
+      console.error('❌ Error creating group:', error);
+      throw new Error(`Failed to create group: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error('Group creation returned no data');
+    }
+
+    console.log('✅ Group created');
+    return convertToGroup(data as DatabaseGroup);
+  } catch (error) {
+    console.error('💥 Error in createGroup:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update an existing group
+ */
+export const updateGroup = async (id: string, updates: Partial<GroupInput>): Promise<Group> => {
+  try {
+    console.log('✏️ Updating group...', id, updates);
+
+    const payload: Record<string, any> = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.description !== undefined) payload.description = updates.description || null;
+    if (updates.capacity !== undefined) payload.capacity = updates.capacity;
+    if (updates.status !== undefined) payload.status = updates.status;
+    if (updates.startDate !== undefined) payload.start_date = updates.startDate || null;
+    if (updates.endDate !== undefined) payload.end_date = updates.endDate || null;
+    if (updates.primaryInstructorId !== undefined) payload.primary_instructor_id = updates.primaryInstructorId || null;
+
+    if (Object.keys(payload).length === 0) {
+      throw new Error('No updates provided for group');
+    }
+
+    const { data, error } = await supabase
+      .from('groups')
+      .update(payload)
+      .eq('id', id)
+      .select(groupSelectWithProfile)
+      .single();
+
+    if (error) {
+      console.error('❌ Error updating group:', error);
+      throw new Error(`Failed to update group: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error('Group update returned no data');
+    }
+
+    console.log('✅ Group updated');
+    return convertToGroup(data as DatabaseGroup);
+  } catch (error) {
+    console.error('💥 Error in updateGroup:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a group and clean up related records
+ */
+export const deleteGroup = async (id: string): Promise<void> => {
+  try {
+    console.log('🗑️ Deleting group...', id);
+
+    // Detach group from classes
+    const { error: classError } = await supabase
+      .from('classes')
+      .update({ group_id: null })
+      .eq('group_id', id);
+
+    if (classError) {
+      console.error('❌ Error clearing group on classes:', classError);
+      throw new Error(`Failed to clear group from classes: ${classError.message}`);
+    }
+
+    // Remove student memberships
+    const { error: membershipError } = await supabase
+      .from('student_groups')
+      .delete()
+      .eq('group_id', id);
+
+    if (membershipError) {
+      console.error('❌ Error deleting group memberships:', membershipError);
+      throw new Error(`Failed to delete group memberships: ${membershipError.message}`);
+    }
+
+    // Delete the group
+    const { error: groupError } = await supabase
+      .from('groups')
+      .delete()
+      .eq('id', id);
+
+    if (groupError) {
+      console.error('❌ Error deleting group:', groupError);
+      throw new Error(`Failed to delete group: ${groupError.message}`);
+    }
+
+    console.log('✅ Group deleted');
+  } catch (error) {
+    console.error('💥 Error in deleteGroup:', error);
+    throw error;
+  }
+};
+
+// ============================================================================
+// MEMBERSHIP HELPERS
+// ============================================================================
+
+/**
+ * Recalculate and update current_enrollment for a group
+ */
+const recalcGroupEnrollment = async (groupId: string): Promise<number> => {
+  const { count, error } = await supabase
+    .from('student_groups')
+    .select('*', { count: 'exact', head: true })
+    .eq('group_id', groupId)
+    .eq('status', 'active');
+
+  if (error) {
+    console.error('❌ Error recalculating enrollment:', error);
+    // Non-fatal: skip enrollment update if count fails
+    return 0;
+  }
+
+  const enrollment = count ?? 0;
+  const { error: updateError } = await supabase
+    .from('groups')
+    .update({ current_enrollment: enrollment })
+    .eq('id', groupId);
+
+  if (updateError) {
+    console.error('❌ Error updating enrollment on group:', updateError);
+    // Non-fatal: membership was added, just enrollment count failed
+  }
+
+  return enrollment;
+};
+
+/**
+ * Add or update a student-group membership
+ */
+export const addStudentToGroup = async (
+  groupId: string,
+  studentId: string,
+  status: 'active' | 'inactive' | 'completed' = 'active'
+): Promise<void> => {
+  try {
+    console.log('➕ Adding student to group', { groupId, studentId, status });
+
+    const { error } = await supabase
+      .from('student_groups')
+      .upsert(
+        {
+          group_id: groupId,
+          student_id: studentId,
+          status,
+          enrolled_at: new Date().toISOString()
+        },
+        { onConflict: 'group_id,student_id' }
+      );
+
+    if (error) {
+      console.error('❌ Error adding student to group:', error);
+      throw new Error(`Failed to add student to group: ${error.message}`);
+    }
+
+    // Update enrollment count if active membership
+    if (status === 'active') {
+      await recalcGroupEnrollment(groupId);
+    }
+
+    console.log('✅ Student added to group');
+  } catch (error) {
+    console.error('💥 Error in addStudentToGroup:', error);
+    throw error;
+  }
+};
+
+/**
+ * Remove a student from a group
+ */
+export const removeStudentFromGroup = async (groupId: string, studentId: string): Promise<void> => {
+  try {
+    console.log('➖ Removing student from group', { groupId, studentId });
+
+    const { error } = await supabase
+      .from('student_groups')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('student_id', studentId);
+
+    if (error) {
+      console.error('❌ Error removing student from group:', error);
+      throw new Error(`Failed to remove student from group: ${error.message}`);
+    }
+
+    await recalcGroupEnrollment(groupId);
+    console.log('✅ Student removed from group');
+  } catch (error) {
+    console.error('💥 Error in removeStudentFromGroup:', error);
+    throw error;
+  }
+};
+
+// ============================================================================
+// CLASSES INTEGRATION
+// ============================================================================
+
+/**
+ * Assign or clear a group on a class
+ */
+export const setClassGroup = async (classId: string, groupId: string | null): Promise<void> => {
+  try {
+    console.log('🗂️ Setting class group', { classId, groupId });
+
+    const { error } = await supabase
+      .from('classes')
+      .update({ group_id: groupId })
+      .eq('id', classId);
+
+    if (error) {
+      console.error('❌ Error setting class group:', error);
+      throw new Error(`Failed to set class group: ${error.message}`);
+    }
+
+    console.log('✅ Class group updated');
+  } catch (error) {
+    console.error('💥 Error in setClassGroup:', error);
+    throw error;
+  }
 };
 
 // ============================================================================

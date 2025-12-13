@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { PageLayout } from "@/components/ui/page-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,275 +14,405 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { 
-  Users, 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreHorizontal, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  UserPlus, 
-  UserMinus, 
-  ArrowRight,
+import {
+  Users,
+  Plus,
+  Search,
+  Filter,
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  Eye,
+  UserPlus,
+  UserMinus,
   BookOpen,
   GraduationCap,
-  CalendarDays,
   StickyNote,
-  CheckCircle2,
-  Circle,
   UserCheck,
-  Move
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/components/ui/use-toast";
+import {
+  Group,
+  GroupInput,
+  addStudentToGroup,
+  createGroup,
+  deleteGroup,
+  getGroupStudents,
+  getGroups,
+  updateGroup,
+  removeStudentFromGroup,
+} from "@/services/groups";
+import { BasicStudent } from "@/data/students";
+import { getStudentsForScheduling } from "@/services/students";
+import { getClasses } from "@/services/classes";
 
-// Types
-interface Student {
-  id: number;
-  name: string;
-  email: string;
-  phone: string;
-  joinDate: string;
-  status: "active" | "completed" | "dropped";
-  groupId?: number | null;
-}
-
-interface Group {
-  id: number;
-  name: string;
-  description?: string;
-  status: "active" | "completed";
-  currentPhase: 1 | 2 | 3 | 4;
-  sessionsCompleted: number;
-  totalSessions: number;
-  notes?: string;
-  createdDate: string;
-  students: number[];
-}
-
-// Dummy Data
-const dummyStudents: Student[] = [
-  { id: 1, name: "Emma Wilson", email: "emma.wilson@email.com", phone: "(555) 123-4567", joinDate: "2024-01-15", status: "active", groupId: 1 },
-  { id: 2, name: "John Smith", email: "john.smith@email.com", phone: "(555) 234-5678", joinDate: "2024-01-20", status: "active", groupId: 1 },
-  { id: 3, name: "Sophia Garcia", email: "sophia.garcia@email.com", phone: "(555) 345-6789", joinDate: "2024-02-01", status: "active", groupId: 2 },
-  { id: 4, name: "Michael Johnson", email: "michael.j@email.com", phone: "(555) 456-7890", joinDate: "2024-02-05", status: "active", groupId: 2 },
-  { id: 5, name: "Olivia Brown", email: "olivia.brown@email.com", phone: "(555) 567-8901", joinDate: "2024-01-10", status: "completed", groupId: 3 },
-  { id: 6, name: "David Lee", email: "david.lee@email.com", phone: "(555) 678-9012", joinDate: "2024-01-12", status: "completed", groupId: 3 },
-  { id: 7, name: "Ava Martinez", email: "ava.martinez@email.com", phone: "(555) 789-0123", joinDate: "2024-03-01", status: "active", groupId: null },
-  { id: 8, name: "James Wilson", email: "james.wilson@email.com", phone: "(555) 890-1234", joinDate: "2024-03-05", status: "active", groupId: null },
-  { id: 9, name: "Tyler Rodriguez", email: "tyler.r@email.com", phone: "(555) 234-5678", joinDate: "2024-02-15", status: "active", groupId: 1 },
-  { id: 10, name: "Isabella Lopez", email: "isabella.lopez@email.com", phone: "(555) 345-6789", joinDate: "2024-02-20", status: "active", groupId: 2 },
-];
-
-const dummyGroups: Group[] = [
-  {
-    id: 1,
-    name: "Group A - Morning Theory",
-    description: "Morning theory sessions for beginners",
-    status: "active",
-    currentPhase: 2,
-    sessionsCompleted: 8,
-    totalSessions: 16,
-    notes: "Fast-learning group, ahead of schedule",
-    createdDate: "2024-01-15",
-    students: [1, 2, 9]
-  },
-  {
-    id: 2,
-    name: "Group B - Evening Theory", 
-    description: "Evening theory sessions",
-    status: "active",
-    currentPhase: 1,
-    sessionsCompleted: 4,
-    totalSessions: 16,
-    notes: "Need extra focus on traffic rules",
-    createdDate: "2024-02-01",
-    students: [3, 4, 10]
-  },
-  {
-    id: 3,
-    name: "Group C - Weekend Intensive",
-    description: "Weekend intensive theory course",
-    status: "completed",
-    currentPhase: 4,
-    sessionsCompleted: 16,
-    totalSessions: 16,
-    notes: "Excellent group, all students passed",
-    createdDate: "2024-01-10",
-    students: [5, 6]
-  },
-];
-
-// Form data interfaces
 interface GroupFormData {
   name: string;
   description: string;
-  currentPhase: 1 | 2 | 3 | 4;
-  totalSessions: number;
-  notes: string;
+  capacity: number;
+  status: "active" | "inactive" | "completed";
+  startDate: string;
+  endDate: string;
+  primaryInstructorId: string | null;
 }
 
 const GroupsSection = () => {
-  // State management
-  const [groups, setGroups] = useState<Group[]>(dummyGroups);
-  const [students, setStudents] = useState<Student[]>(dummyStudents);
+  const { toast } = useToast();
+
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [students, setStudents] = useState<BasicStudent[]>([]);
+  const [groupMembers, setGroupMembers] = useState<Record<string, BasicStudent[]>>({});
+  const [groupProgress, setGroupProgress] = useState<Record<string, { total: number; completed: number; percent: number }>>({});
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "completed">("all");
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
-  const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
-  
-  // Modal states
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [editGroupOpen, setEditGroupOpen] = useState(false);
   const [groupDetailsOpen, setGroupDetailsOpen] = useState(false);
   const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
   const [groupToDelete, setGroupToDelete] = useState<Group | null>(null);
-  
-  // Form data
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [groupTheoryClasses, setGroupTheoryClasses] = useState<any[]>([]);
+
   const [groupFormData, setGroupFormData] = useState<GroupFormData>({
     name: "",
     description: "",
-    currentPhase: 1,
-    totalSessions: 16,
-    notes: "",
+    capacity: 12,
+    status: "active",
+    startDate: "",
+    endDate: "",
+    primaryInstructorId: null,
   });
 
-  // Computed values
-  const filteredGroups = groups.filter(group => {
-    const matchesSearch = group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         group.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || group.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const [fetchedGroups, fetchedStudents] = await Promise.all([
+          getGroups(),
+          getStudentsForScheduling(),
+        ]);
+        setGroups(fetchedGroups);
+        setStudents(fetchedStudents);
 
-  const unassignedStudents = students.filter(student => !student.groupId);
+        // Load all group memberships upfront so unassigned students can be computed
+        const membersMap: Record<string, BasicStudent[]> = {};
+        await Promise.all(
+          fetchedGroups.map(async (g) => {
+            try {
+              const data = await getGroupStudents(g.id);
+              membersMap[g.id] = data.map((item: any) => {
+                const st = item.students;
+                return {
+                  id: st.id,
+                  name: `${st.profiles.first_name} ${st.profiles.last_name}`,
+                  studentId: st.student_id,
+                  email: st.profiles.email,
+                  phone: st.profiles.phone,
+                  group: "none",
+                  hoursDone: 0,
+                  currentPhase: 1,
+                  status: "active",
+                  hasBalance: false,
+                  hasMissingClasses: false,
+                } as BasicStudent;
+              });
+            } catch {
+              membersMap[g.id] = [];
+            }
+          })
+        );
+        setGroupMembers(membersMap);
 
-  // Helper functions
-  const getStudentsInGroup = (groupId: number) => {
-    return students.filter(student => student.groupId === groupId);
-  };
-
-  const getProgressPercentage = (completed: number, total: number) => {
-    return Math.round((completed / total) * 100);
-  };
-
-  const getPhaseColor = (phase: number) => {
-    const colors = {
-      1: "bg-red-100 text-red-800",
-      2: "bg-yellow-100 text-yellow-800", 
-      3: "bg-blue-100 text-blue-800",
-      4: "bg-green-100 text-green-800"
+        await loadGroupProgress(fetchedGroups.map((g) => g.id));
+      } catch (error: any) {
+        toast({
+          title: "Error loading groups",
+          description: error?.message || "Failed to load groups",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
     };
-    return colors[phase as keyof typeof colors];
-  };
+    loadData();
+  }, [toast]);
 
-  // Form handlers
-  const handleCreateGroup = () => {
-    const newGroup: Group = {
-      id: Math.max(...groups.map(g => g.id)) + 1,
-      name: groupFormData.name,
-      description: groupFormData.description,
-      status: "active",
-      currentPhase: groupFormData.currentPhase,
-      sessionsCompleted: 0,
-      totalSessions: groupFormData.totalSessions,
-      notes: groupFormData.notes,
-      createdDate: new Date().toISOString().split('T')[0],
-      students: []
-    };
-    
-    setGroups([...groups, newGroup]);
-    setCreateGroupOpen(false);
-    resetForm();
-  };
+  const filteredGroups = useMemo(() => {
+    return groups.filter((group) => {
+      const matchesSearch =
+        group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        group.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === "all" || group.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [groups, searchTerm, statusFilter]);
 
-  const handleEditGroup = () => {
-    if (!selectedGroup) return;
-    
-    const updatedGroups = groups.map(group => 
-      group.id === selectedGroup.id 
-        ? { ...group, ...groupFormData }
-        : group
+  const unassignedStudents = useMemo(() => {
+    const inGroups = new Set<string>();
+    Object.values(groupMembers).forEach((list) =>
+      list.forEach((s) => inGroups.add(s.id))
     );
-    
-    setGroups(updatedGroups);
-    setEditGroupOpen(false);
-    setSelectedGroup(null);
-    resetForm();
+    return students.filter((s) => !inGroups.has(s.id));
+  }, [students, groupMembers]);
+
+  const getStudentsInGroup = (groupId: string) => groupMembers[groupId] || [];
+
+  const loadGroupProgress = async (groupIds: string[]) => {
+    try {
+      const entries = await Promise.all(
+        groupIds.map(async (id) => {
+          const classes = await getClasses({ groupId: id, type: "theory" as any });
+          const TOTAL_THEORY = 12;
+          const completed = Math.min(
+            TOTAL_THEORY,
+            classes.filter((c) => c.status === "completed").length
+          );
+          const percent = Math.round((completed / TOTAL_THEORY) * 100);
+          const total = TOTAL_THEORY;
+          return [id, { total, completed, percent }];
+        })
+      );
+      setGroupProgress(Object.fromEntries(entries));
+    } catch (error: any) {
+      toast({
+        title: "Error loading group progress",
+        description: error?.message || "Failed to load theory class progress",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteGroup = () => {
+  const loadGroupMembers = async (groupId: string) => {
+    try {
+      setMembersLoading(true);
+      const data = await getGroupStudents(groupId);
+      const members: BasicStudent[] = data.map((item: any) => {
+        const st = item.students;
+        return {
+          id: st.id,
+          name: `${st.profiles.first_name} ${st.profiles.last_name}`,
+          studentId: st.student_id,
+          email: st.profiles.email,
+          phone: st.profiles.phone,
+          group: "none",
+          hoursDone: 0,
+          currentPhase: 1,
+          status: "active",
+          hasBalance: false,
+          hasMissingClasses: false,
+        } as BasicStudent;
+      });
+      setGroupMembers((prev) => ({ ...prev, [groupId]: members }));
+    } catch (error: any) {
+      toast({
+        title: "Error loading members",
+        description: error?.message || "Failed to load group members",
+        variant: "destructive",
+      });
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const getStatusBadgeClass = (status: Group["status"]) => {
+    if (status === "active") return "bg-green-100 text-green-800";
+    if (status === "inactive") return "bg-yellow-100 text-yellow-800";
+    return "bg-gray-200 text-gray-800";
+  };
+
+  const handleCreateGroup = async () => {
+    try {
+      setSaving(true);
+      if (!groupFormData.name.trim()) {
+        toast({ title: "Name required", variant: "destructive" });
+        return;
+      }
+      const input: GroupInput = {
+        name: groupFormData.name.trim(),
+        description: groupFormData.description || "",
+        capacity: groupFormData.capacity,
+        status: groupFormData.status,
+        startDate: groupFormData.startDate || null,
+        endDate: groupFormData.endDate || null,
+        primaryInstructorId: groupFormData.primaryInstructorId || null,
+      };
+      const created = await createGroup(input);
+      setGroups((prev) => [created, ...prev]);
+      setGroupProgress((prev) => ({ ...prev, [created.id]: { total: 0, completed: 0, percent: 0 } }));
+      setCreateGroupOpen(false);
+      resetForm();
+      toast({ title: "Group created", description: created.name });
+    } catch (error: any) {
+      toast({
+        title: "Error creating group",
+        description: error?.message || "Failed to create group",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditGroup = async () => {
+    if (!selectedGroup) return;
+    try {
+      setSaving(true);
+      const input: Partial<GroupInput> = {
+        name: groupFormData.name.trim(),
+        description: groupFormData.description || "",
+        capacity: groupFormData.capacity,
+        status: groupFormData.status,
+        startDate: groupFormData.startDate || null,
+        endDate: groupFormData.endDate || null,
+        primaryInstructorId: groupFormData.primaryInstructorId || null,
+      };
+      const updated = await updateGroup(selectedGroup.id, input);
+      setGroups((prev) => prev.map((g) => (g.id === updated.id ? updated : g)));
+      await loadGroupProgress([selectedGroup.id]);
+      setEditGroupOpen(false);
+      setSelectedGroup(null);
+      resetForm();
+      toast({ title: "Group updated", description: updated.name });
+    } catch (error: any) {
+      toast({
+        title: "Error updating group",
+        description: error?.message || "Failed to update group",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
     if (!groupToDelete) return;
-    
-    // Remove group and unassign students
-    setGroups(groups.filter(g => g.id !== groupToDelete.id));
-    setStudents(students.map(student => 
-      student.groupId === groupToDelete.id 
-        ? { ...student, groupId: null }
-        : student
-    ));
-    
-    setDeleteGroupOpen(false);
-    setGroupToDelete(null);
+    try {
+      setSaving(true);
+      await deleteGroup(groupToDelete.id);
+      setGroups((prev) => prev.filter((g) => g.id !== groupToDelete.id));
+      setGroupMembers((prev) => {
+        const copy = { ...prev };
+        delete copy[groupToDelete.id];
+        return copy;
+      });
+      setGroupProgress((prev) => {
+        const copy = { ...prev };
+        delete copy[groupToDelete.id];
+        return copy;
+      });
+      setDeleteGroupOpen(false);
+      setGroupToDelete(null);
+      toast({ title: "Group deleted" });
+    } catch (error: any) {
+      toast({
+        title: "Error deleting group",
+        description: error?.message || "Failed to delete group",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleAddStudentToGroup = (studentId: number, groupId: number) => {
-    setStudents(students.map(student => 
-      student.id === studentId 
-        ? { ...student, groupId }
-        : student
-    ));
+  const handleAddStudentToGroup = async (studentId: string, groupId: string) => {
+    try {
+      await addStudentToGroup(groupId, studentId, "active");
+      await loadGroupMembers(groupId);
+      toast({ title: "Student added" });
+    } catch (error: any) {
+      toast({
+        title: "Error adding student",
+        description: error?.message || "Failed to add student",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleRemoveStudentFromGroup = (studentId: number) => {
-    setStudents(students.map(student => 
-      student.id === studentId 
-        ? { ...student, groupId: null }
-        : student
-    ));
+  const handleRemoveStudentFromGroup = async (groupId: string, studentId: string) => {
+    try {
+      await removeStudentFromGroup(groupId, studentId);
+      await loadGroupMembers(groupId);
+      toast({ title: "Student removed" });
+    } catch (error: any) {
+      toast({
+        title: "Error removing student",
+        description: error?.message || "Failed to remove student",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleMoveStudents = (studentIds: number[], targetGroupId: number | null) => {
-    setStudents(students.map(student => 
-      studentIds.includes(student.id)
-        ? { ...student, groupId: targetGroupId }
-        : student
-    ));
-    setSelectedStudents([]);
+  const handleMoveStudents = async (studentIds: string[], targetGroupId: string | null) => {
+    if (!selectedGroup) return;
+    try {
+      for (const id of studentIds) {
+        if (targetGroupId) {
+          await addStudentToGroup(targetGroupId, id, "active");
+        } else {
+          await removeStudentFromGroup(selectedGroup.id, id);
+        }
+      }
+      await loadGroupMembers(selectedGroup.id);
+      if (targetGroupId) await loadGroupMembers(targetGroupId);
+      setSelectedStudents([]);
+      toast({ title: "Students moved" });
+    } catch (error: any) {
+      toast({
+        title: "Error moving students",
+        description: error?.message || "Failed to move students",
+        variant: "destructive",
+      });
+    }
   };
 
   const resetForm = () => {
     setGroupFormData({
       name: "",
       description: "",
-      currentPhase: 1,
-      totalSessions: 16,
-      notes: "",
+      capacity: 12,
+      status: "active",
+      startDate: "",
+      endDate: "",
+      primaryInstructorId: null,
     });
   };
 
   const openEditDialog = (group: Group) => {
     setSelectedGroup(group);
+    setGroupDetailsOpen(false);
     setGroupFormData({
       name: group.name,
       description: group.description || "",
-      currentPhase: group.currentPhase,
-      totalSessions: group.totalSessions,
-      notes: group.notes || "",
+      capacity: group.capacity,
+      status: group.status,
+      startDate: group.startDate || "",
+      endDate: group.endDate || "",
+      primaryInstructorId: group.primaryInstructor.id,
     });
     setEditGroupOpen(true);
   };
 
-  const openGroupDetails = (group: Group) => {
+  const openGroupDetails = async (group: Group) => {
     setSelectedGroup(group);
     setGroupDetailsOpen(true);
+    await loadGroupMembers(group.id);
+    // Load theory classes for this group
+    try {
+      const classes = await getClasses({ groupId: group.id, type: "theory" as any });
+      setGroupTheoryClasses(classes);
+    } catch {
+      setGroupTheoryClasses([]);
+    }
   };
 
   return (
     <PageLayout>
       <div className="flex flex-col gap-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Groups Management</h1>
           <Button onClick={() => setCreateGroupOpen(true)}>
@@ -290,8 +420,7 @@ const GroupsSection = () => {
             Create Group
           </Button>
         </div>
-        
-        {/* Search and Filters */}
+
         <Card>
           <CardContent className="p-4">
             <div className="flex gap-4 items-center">
@@ -304,7 +433,7 @@ const GroupsSection = () => {
                   className="pl-10"
                 />
               </div>
-              <Select value={statusFilter} onValueChange={(value: "all" | "active" | "completed") => setStatusFilter(value)}>
+              <Select value={statusFilter} onValueChange={(value: "all" | "active" | "inactive" | "completed") => setStatusFilter(value)}>
                 <SelectTrigger className="w-[180px]">
                   <Filter className="mr-2 h-4 w-4" />
                   <SelectValue />
@@ -312,6 +441,7 @@ const GroupsSection = () => {
                 <SelectContent>
                   <SelectItem value="all">All Groups</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                 </SelectContent>
               </Select>
@@ -319,15 +449,14 @@ const GroupsSection = () => {
           </CardContent>
         </Card>
 
-        {/* Groups Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredGroups.map((group) => {
-            const groupStudents = getStudentsInGroup(group.id);
-            const progressPercentage = getProgressPercentage(group.sessionsCompleted, group.totalSessions);
-            
+            const groupStudents = groupMembers[group.id] || [];
+            const progressData = groupProgress[group.id] || { total: 0, completed: 0, percent: 0 };
+
             return (
-              <Card 
-                key={group.id} 
+              <Card
+                key={group.id}
                 className="cursor-pointer hover:shadow-md transition-shadow"
                 onClick={() => openGroupDetails(group)}
               >
@@ -355,8 +484,11 @@ const GroupsSection = () => {
                           Edit Group
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => { setGroupToDelete(group); setDeleteGroupOpen(true); }}
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setGroupToDelete(group);
+                            setDeleteGroupOpen(true);
+                          }}
                           className="text-red-600"
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
@@ -367,32 +499,28 @@ const GroupsSection = () => {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Status and Phase */}
                   <div className="flex items-center justify-between">
-                    <Badge variant={group.status === "active" ? "default" : "secondary"}>
-                      {group.status === "active" ? "Active" : "Completed"}
-                    </Badge>
-                    <Badge className={getPhaseColor(group.currentPhase)}>
-                      Phase {group.currentPhase}
+                    <Badge className={getStatusBadgeClass(group.status)}>{group.status}</Badge>
+                    <Badge variant={group.isFull ? "secondary" : "default"}>
+                      {group.isFull ? "Full" : `${group.availableSpots} spots`}
                     </Badge>
                   </div>
 
-                  {/* Progress */}
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Progress</span>
-                      <span className="font-medium">{progressPercentage}%</span>
+                      <span className="text-muted-foreground">Theory Progress</span>
+                      <span className="font-medium">{progressData.percent}%</span>
                     </div>
-                    <Progress value={progressPercentage} className="h-2" />
+                    <Progress value={progressData.percent} className="h-2" />
                     <p className="text-xs text-muted-foreground">
-                      {group.sessionsCompleted} of {group.totalSessions} sessions completed
+                      {`${progressData.completed} of ${progressData.total} theory classes completed`}
                     </p>
                   </div>
 
-                  {/* Students Count */}
                   <div className="flex items-center text-sm text-muted-foreground">
                     <Users className="mr-2 h-4 w-4" />
-                    {groupStudents.length} student{groupStudents.length !== 1 ? 's' : ''}
+                    {groupStudents.length || group.currentEnrollment} student
+                    {(groupStudents.length || group.currentEnrollment) !== 1 ? "s" : ""}
                   </div>
                 </CardContent>
               </Card>
@@ -400,7 +528,6 @@ const GroupsSection = () => {
           })}
         </div>
 
-        {/* Unassigned Students */}
         {unassignedStudents.length > 0 && (
           <Card>
             <CardHeader>
@@ -417,16 +544,18 @@ const GroupsSection = () => {
                       <p className="font-medium">{student.name}</p>
                       <p className="text-sm text-muted-foreground">{student.email}</p>
                     </div>
-                    <Select onValueChange={(value) => handleAddStudentToGroup(student.id, parseInt(value))}>
+                    <Select onValueChange={(value) => handleAddStudentToGroup(student.id, value)}>
                       <SelectTrigger className="w-[200px]">
                         <SelectValue placeholder="Assign to group" />
                       </SelectTrigger>
                       <SelectContent>
-                        {groups.filter(g => g.status === "active").map((group) => (
-                          <SelectItem key={group.id} value={group.id.toString()}>
-                            {group.name}
-                          </SelectItem>
-                        ))}
+                        {groups
+                          .filter((g) => g.status === "active")
+                          .map((group) => (
+                            <SelectItem key={group.id} value={group.id}>
+                              {group.name}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -436,12 +565,14 @@ const GroupsSection = () => {
           </Card>
         )}
 
-        {/* Create/Edit Group Dialog */}
-        <Dialog open={createGroupOpen || editGroupOpen} onOpenChange={() => {
-          setCreateGroupOpen(false);
-          setEditGroupOpen(false);
-          resetForm();
-        }}>
+        <Dialog
+          open={createGroupOpen || editGroupOpen}
+          onOpenChange={() => {
+            setCreateGroupOpen(false);
+            setEditGroupOpen(false);
+            resetForm();
+          }}
+        >
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>{editGroupOpen ? "Edit Group" : "Create New Group"}</DialogTitle>
@@ -470,60 +601,74 @@ const GroupsSection = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="phase">Current Phase</Label>
-                  <Select 
-                    value={groupFormData.currentPhase.toString()} 
-                    onValueChange={(value) => setGroupFormData({ ...groupFormData, currentPhase: parseInt(value) as 1 | 2 | 3 | 4 })}
+                  <Label htmlFor="capacity">Capacity</Label>
+                  <Input
+                    id="capacity"
+                    type="number"
+                    value={groupFormData.capacity}
+                    onChange={(e) =>
+                      setGroupFormData({ ...groupFormData, capacity: parseInt(e.target.value) || 1 })
+                    }
+                    min="1"
+                    max="50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={groupFormData.status}
+                    onValueChange={(value: Group["status"]) => setGroupFormData({ ...groupFormData, status: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="1">Phase 1</SelectItem>
-                      <SelectItem value="2">Phase 2</SelectItem>
-                      <SelectItem value="3">Phase 3</SelectItem>
-                      <SelectItem value="4">Phase 4</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="totalSessions">Total Sessions</Label>
+                  <Label htmlFor="startDate">Start Date</Label>
                   <Input
-                    id="totalSessions"
-                    type="number"
-                    value={groupFormData.totalSessions}
-                    onChange={(e) => setGroupFormData({ ...groupFormData, totalSessions: parseInt(e.target.value) || 16 })}
-                    min="1"
-                    max="50"
+                    id="startDate"
+                    type="date"
+                    value={groupFormData.startDate}
+                    onChange={(e) => setGroupFormData({ ...groupFormData, startDate: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="endDate">End Date</Label>
+                  <Input
+                    id="endDate"
+                    type="date"
+                    value={groupFormData.endDate}
+                    onChange={(e) => setGroupFormData({ ...groupFormData, endDate: e.target.value })}
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes (Optional)</Label>
-                <Textarea
-                  id="notes"
-                  value={groupFormData.notes}
-                  onChange={(e) => setGroupFormData({ ...groupFormData, notes: e.target.value })}
-                  placeholder="Enter any notes about this group"
-                />
-              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                setCreateGroupOpen(false);
-                setEditGroupOpen(false);
-                resetForm();
-              }}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCreateGroupOpen(false);
+                  setEditGroupOpen(false);
+                  resetForm();
+                }}
+              >
                 Cancel
               </Button>
-              <Button onClick={editGroupOpen ? handleEditGroup : handleCreateGroup}>
-                {editGroupOpen ? "Update Group" : "Create Group"}
+              <Button onClick={editGroupOpen ? handleEditGroup : handleCreateGroup} disabled={saving}>
+                {saving ? "Saving..." : editGroupOpen ? "Update Group" : "Create Group"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Group Details Sheet */}
         <Sheet open={groupDetailsOpen} onOpenChange={setGroupDetailsOpen}>
           <SheetContent className="sm:max-w-2xl">
             {selectedGroup && (
@@ -532,22 +677,22 @@ const GroupsSection = () => {
                   <SheetTitle>{selectedGroup.name}</SheetTitle>
                   <SheetDescription>{selectedGroup.description}</SheetDescription>
                 </SheetHeader>
-                <div className="mt-6">
-                  <Tabs defaultValue="overview" className="w-full">
+                <div className="mt-6 flex flex-col h-[calc(100vh-140px)]">
+                  <Tabs defaultValue="overview" className="w-full flex flex-col flex-1 overflow-hidden">
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="overview">Overview</TabsTrigger>
                       <TabsTrigger value="students">Students</TabsTrigger>
                     </TabsList>
-                    
-                    <TabsContent value="overview" className="space-y-4 mt-4">
+
+                    <TabsContent value="overview" className="space-y-4 mt-4 overflow-y-auto flex-1">
                       <div className="grid grid-cols-2 gap-4">
                         <Card>
                           <CardContent className="p-4">
                             <div className="flex items-center space-x-2">
                               <BookOpen className="h-5 w-5 text-blue-600" />
                               <div>
-                                <p className="text-sm font-medium">Current Phase</p>
-                                <p className="text-2xl font-bold">Phase {selectedGroup.currentPhase}</p>
+                                <p className="text-sm font-medium">Capacity</p>
+                                <p className="text-2xl font-bold">{selectedGroup.capacity}</p>
                               </div>
                             </div>
                           </CardContent>
@@ -557,68 +702,125 @@ const GroupsSection = () => {
                             <div className="flex items-center space-x-2">
                               <GraduationCap className="h-5 w-5 text-green-600" />
                               <div>
-                                <p className="text-sm font-medium">Progress</p>
+                                <p className="text-sm font-medium">Enrolled</p>
                                 <p className="text-2xl font-bold">
-                                  {getProgressPercentage(selectedGroup.sessionsCompleted, selectedGroup.totalSessions)}%
+                                  {selectedGroup.currentEnrollment}/{selectedGroup.capacity}
                                 </p>
                               </div>
                             </div>
                           </CardContent>
                         </Card>
                       </div>
-                      
+
                       <Card>
                         <CardContent className="p-4">
                           <div className="space-y-2">
                             <div className="flex justify-between text-sm">
-                              <span>Sessions Progress</span>
-                              <span>{selectedGroup.sessionsCompleted} / {selectedGroup.totalSessions}</span>
+                              <span>Dates</span>
+                              <span>
+                                {selectedGroup.startDate || "N/A"} - {selectedGroup.endDate || "N/A"}
+                              </span>
                             </div>
-                            <Progress 
-                              value={getProgressPercentage(selectedGroup.sessionsCompleted, selectedGroup.totalSessions)} 
-                              className="h-3"
-                            />
                           </div>
                         </CardContent>
                       </Card>
-                      
-                      {selectedGroup.notes && (
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-sm flex items-center">
-                              <StickyNote className="mr-2 h-4 w-4" />
-                              Notes
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <p className="text-sm text-muted-foreground">{selectedGroup.notes}</p>
-                          </CardContent>
-                        </Card>
-                      )}
+
+                      {/* Theory Classes Progress */}
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base flex items-center gap-2">
+                            <BookOpen className="h-4 w-4" />
+                            Theory Classes ({groupTheoryClasses.filter(c => c.status === 'completed').length}/12 completed)
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 pt-0">
+                          <div className="space-y-2">
+                            {/* Show all 12 theory class slots */}
+                            {Array.from({ length: 12 }, (_, i) => {
+                              const classNum = i + 1;
+                              // Find a matching class for this slot (by title or order)
+                              const matchingClass = groupTheoryClasses.find(
+                                (c) => c.className?.includes(`${classNum}`) || c.className?.includes(`Class ${classNum}`)
+                              ) || groupTheoryClasses[i];
+                              const isCompleted = matchingClass?.status === 'completed';
+                              const isScheduled = matchingClass && matchingClass.status !== 'completed';
+
+                              // Theory class names based on the SAAQ program
+                              const theoryClassNames = [
+                                "The Vehicle",
+                                "The Driver", 
+                                "The Environment",
+                                "At-Risk Behaviours",
+                                "Evaluation",
+                                "Accompanied Driving",
+                                "OEA Strategy",
+                                "Speed",
+                                "Sharing the Road",
+                                "Alcohol and Drugs",
+                                "Fatigue and Distractions",
+                                "Eco-Driving"
+                              ];
+
+                              return (
+                                <div
+                                  key={classNum}
+                                  className={`flex items-center justify-between p-2 rounded border ${
+                                    isCompleted
+                                      ? "bg-green-50 border-green-200"
+                                      : isScheduled
+                                      ? "bg-blue-50 border-blue-200"
+                                      : "bg-gray-50 border-gray-200"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium w-6">{classNum}.</span>
+                                    <span className="text-sm">{theoryClassNames[i]}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {isCompleted ? (
+                                      <Badge className="bg-green-600">Completed</Badge>
+                                    ) : isScheduled ? (
+                                      <Badge variant="outline" className="border-blue-400 text-blue-600">
+                                        Scheduled
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-gray-500">
+                                        Not Scheduled
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
                     </TabsContent>
-                    
-                    <TabsContent value="students" className="mt-4">
+
+                    <TabsContent value="students" className="mt-4 overflow-y-auto flex-1">
                       <div className="space-y-4">
                         <div className="flex justify-between items-center">
                           <h3 className="text-lg font-medium">Group Students</h3>
                           <div className="flex gap-2">
                             {selectedStudents.length > 0 && (
-                              <Select onValueChange={(value) => {
-                                if (value === "remove") {
-                                  selectedStudents.forEach(id => handleRemoveStudentFromGroup(id));
-                                } else {
-                                  handleMoveStudents(selectedStudents, parseInt(value));
-                                }
-                              }}>
+                              <Select
+                                onValueChange={(value) => {
+                                  if (value === "remove") {
+                                    handleMoveStudents(selectedStudents, null);
+                                  } else {
+                                    handleMoveStudents(selectedStudents, value);
+                                  }
+                                }}
+                              >
                                 <SelectTrigger className="w-[150px]">
                                   <SelectValue placeholder="Move selected" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="remove">Remove from group</SelectItem>
                                   {groups
-                                    .filter(g => g.id !== selectedGroup.id && g.status === "active")
+                                    .filter((g) => g.id !== selectedGroup.id && g.status === "active")
                                     .map((group) => (
-                                      <SelectItem key={group.id} value={group.id.toString()}>
+                                      <SelectItem key={group.id} value={group.id}>
                                         {group.name}
                                       </SelectItem>
                                     ))}
@@ -627,7 +829,7 @@ const GroupsSection = () => {
                             )}
                           </div>
                         </div>
-                        
+
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -636,7 +838,7 @@ const GroupsSection = () => {
                                   checked={selectedStudents.length === getStudentsInGroup(selectedGroup.id).length}
                                   onCheckedChange={(checked) => {
                                     if (checked) {
-                                      setSelectedStudents(getStudentsInGroup(selectedGroup.id).map(s => s.id));
+                                      setSelectedStudents(getStudentsInGroup(selectedGroup.id).map((s) => s.id));
                                     } else {
                                       setSelectedStudents([]);
                                     }
@@ -650,46 +852,54 @@ const GroupsSection = () => {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {getStudentsInGroup(selectedGroup.id).map((student) => (
-                              <TableRow key={student.id}>
-                                <TableCell>
-                                  <Checkbox
-                                    checked={selectedStudents.includes(student.id)}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        setSelectedStudents([...selectedStudents, student.id]);
-                                      } else {
-                                        setSelectedStudents(selectedStudents.filter(id => id !== student.id));
-                                      }
-                                    }}
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <div>
-                                    <p className="font-medium">{student.name}</p>
-                                    <p className="text-sm text-muted-foreground">{student.email}</p>
-                                  </div>
-                                </TableCell>
-                                <TableCell>{student.phone}</TableCell>
-                                <TableCell>
-                                  <Badge variant={student.status === "active" ? "default" : "secondary"}>
-                                    {student.status}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleRemoveStudentFromGroup(student.id)}
-                                  >
-                                    <UserMinus className="h-4 w-4" />
-                                  </Button>
+                            {membersLoading && (
+                              <TableRow>
+                                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                                  Loading members...
                                 </TableCell>
                               </TableRow>
-                            ))}
+                            )}
+                            {!membersLoading &&
+                              getStudentsInGroup(selectedGroup.id).map((student) => (
+                                <TableRow key={student.id}>
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={selectedStudents.includes(student.id)}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          setSelectedStudents([...selectedStudents, student.id]);
+                                        } else {
+                                          setSelectedStudents(selectedStudents.filter((id) => id !== student.id));
+                                        }
+                                      }}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <div>
+                                      <p className="font-medium">{student.name}</p>
+                                      <p className="text-sm text-muted-foreground">{student.email}</p>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>{student.phone}</TableCell>
+                                  <TableCell>
+                                    <Badge variant={student.status === "active" ? "default" : "secondary"}>
+                                      {student.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleRemoveStudentFromGroup(selectedGroup.id, student.id)}
+                                    >
+                                      <UserMinus className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
                           </TableBody>
                         </Table>
-                        
+
                         {unassignedStudents.length > 0 && (
                           <div className="space-y-2">
                             <h4 className="font-medium">Add Students to Group</h4>
@@ -699,10 +909,7 @@ const GroupsSection = () => {
                                   <p className="font-medium">{student.name}</p>
                                   <p className="text-sm text-muted-foreground">{student.email}</p>
                                 </div>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleAddStudentToGroup(student.id, selectedGroup.id)}
-                                >
+                                <Button size="sm" onClick={() => handleAddStudentToGroup(student.id, selectedGroup.id)}>
                                   <UserPlus className="mr-2 h-4 w-4" />
                                   Add
                                 </Button>
@@ -719,19 +926,18 @@ const GroupsSection = () => {
           </SheetContent>
         </Sheet>
 
-        {/* Delete Confirmation Dialog */}
         <AlertDialog open={deleteGroupOpen} onOpenChange={setDeleteGroupOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Group</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete "{groupToDelete?.name}"? This action cannot be undone.
-                All students in this group will be unassigned.
+                Are you sure you want to delete "{groupToDelete?.name}"? This action cannot be undone. All students in
+                this group will be unassigned.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDeleteGroup} className="bg-red-600 hover:bg-red-700">
+              <AlertDialogAction onClick={handleDeleteGroup} className="bg-red-600 hover:bg-red-700" disabled={saving}>
                 Delete Group
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -742,4 +948,4 @@ const GroupsSection = () => {
   );
 };
 
-export default GroupsSection; 
+export default GroupsSection;
