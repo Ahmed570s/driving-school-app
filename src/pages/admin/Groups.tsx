@@ -51,10 +51,16 @@ interface GroupFormData {
   name: string;
   description: string;
   capacity: number;
-  status: "active" | "inactive" | "completed";
+  status: "active" | "completed" | "cancelled";
   startDate: string;
   endDate: string;
   primaryInstructorId: string | null;
+}
+
+interface FormErrors {
+  name?: string;
+  capacity?: string;
+  status?: string;
 }
 
 const GroupsSection = () => {
@@ -65,7 +71,7 @@ const GroupsSection = () => {
   const [groupMembers, setGroupMembers] = useState<Record<string, BasicStudent[]>>({});
   const [groupProgress, setGroupProgress] = useState<Record<string, { total: number; completed: number; percent: number }>>({});
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "completed">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "cancelled">("all");
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
@@ -77,6 +83,8 @@ const GroupsSection = () => {
   const [saving, setSaving] = useState(false);
   const [membersLoading, setMembersLoading] = useState(false);
   const [groupTheoryClasses, setGroupTheoryClasses] = useState<any[]>([]);
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [groupFormData, setGroupFormData] = useState<GroupFormData>({
     name: "",
@@ -221,17 +229,74 @@ const GroupsSection = () => {
 
   const getStatusBadgeClass = (status: Group["status"]) => {
     if (status === "active") return "bg-green-100 text-green-800";
-    if (status === "inactive") return "bg-yellow-100 text-yellow-800";
+    if (status === "completed") return "bg-blue-100 text-blue-800";
+    if (status === "cancelled") return "bg-red-100 text-red-800";
     return "bg-gray-200 text-gray-800";
   };
 
+  const validateForm = (): boolean => {
+    const errors: FormErrors = {};
+
+    // Name is required
+    if (!groupFormData.name.trim()) {
+      errors.name = "Group name is required";
+    }
+
+    // Capacity must be at least 1
+    if (!groupFormData.capacity || groupFormData.capacity < 1) {
+      errors.capacity = "Capacity must be at least 1";
+    }
+
+    // Status is required (always has a default, but check anyway)
+    if (!groupFormData.status) {
+      errors.status = "Status is required";
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleCreateGroup = async () => {
+    // Validate form
+    if (!validateForm()) {
+      toast({ 
+        title: "Validation Error", 
+        description: "Please fix the errors in the form",
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    // Optimistic: create a temp group immediately
+    const tempId = `temp-${Date.now()}`;
+    const optimisticGroup: Group = {
+      id: tempId,
+      name: groupFormData.name.trim(),
+      description: groupFormData.description || "",
+      capacity: groupFormData.capacity,
+      currentEnrollment: 0,
+      availableSpots: groupFormData.capacity,
+      status: groupFormData.status,
+      startDate: groupFormData.startDate || "",
+      endDate: groupFormData.endDate || "",
+      primaryInstructor: { id: null, name: "No Instructor", email: "", phone: "" },
+      enrollmentPercentage: 0,
+      isActive: groupFormData.status === "active",
+      isFull: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Add optimistic group to list
+    setGroups((prev) => [optimisticGroup, ...prev]);
+    setGroupProgress((prev) => ({ ...prev, [tempId]: { total: 12, completed: 0, percent: 0 } }));
+    // Initialize empty members for the new group so it appears in dropdowns
+    setGroupMembers((prev) => ({ ...prev, [tempId]: [] }));
+    setCreateGroupOpen(false);
+    resetForm();
+
     try {
       setSaving(true);
-      if (!groupFormData.name.trim()) {
-        toast({ title: "Name required", variant: "destructive" });
-        return;
-      }
       const input: GroupInput = {
         name: groupFormData.name.trim(),
         description: groupFormData.description || "",
@@ -242,12 +307,32 @@ const GroupsSection = () => {
         primaryInstructorId: groupFormData.primaryInstructorId || null,
       };
       const created = await createGroup(input);
-      setGroups((prev) => [created, ...prev]);
-      setGroupProgress((prev) => ({ ...prev, [created.id]: { total: 0, completed: 0, percent: 0 } }));
-      setCreateGroupOpen(false);
-      resetForm();
+
+      // Replace optimistic group with real one
+      setGroups((prev) => prev.map((g) => (g.id === tempId ? created : g)));
+      setGroupProgress((prev) => {
+        const { [tempId]: _, ...rest } = prev;
+        return { ...rest, [created.id]: { total: 12, completed: 0, percent: 0 } };
+      });
+      // Update groupMembers to use real ID
+      setGroupMembers((prev) => {
+        const { [tempId]: tempMembers, ...rest } = prev;
+        return { ...rest, [created.id]: tempMembers || [] };
+      });
+
       toast({ title: "Group created", description: created.name });
     } catch (error: any) {
+      // Rollback optimistic update
+      setGroups((prev) => prev.filter((g) => g.id !== tempId));
+      setGroupProgress((prev) => {
+        const { [tempId]: _, ...rest } = prev;
+        return rest;
+      });
+      setGroupMembers((prev) => {
+        const { [tempId]: _, ...rest } = prev;
+        return rest;
+      });
+
       toast({
         title: "Error creating group",
         description: error?.message || "Failed to create group",
@@ -260,6 +345,17 @@ const GroupsSection = () => {
 
   const handleEditGroup = async () => {
     if (!selectedGroup) return;
+
+    // Validate form
+    if (!validateForm()) {
+      toast({ 
+        title: "Validation Error", 
+        description: "Please fix the errors in the form",
+        variant: "destructive" 
+      });
+      return;
+    }
+
     try {
       setSaving(true);
       const input: Partial<GroupInput> = {
@@ -291,31 +387,46 @@ const GroupsSection = () => {
 
   const handleDeleteGroup = async () => {
     if (!groupToDelete) return;
+
+    const deletedGroupId = groupToDelete.id;
+    const deletedGroupName = groupToDelete.name;
+
+    // Optimistic: remove from list immediately
+    const previousGroups = [...groups];
+    const previousMembers = { ...groupMembers };
+    const previousProgress = { ...groupProgress };
+
+    setGroups((prev) => prev.filter((g) => g.id !== deletedGroupId));
+    setGroupMembers((prev) => {
+      const copy = { ...prev };
+      delete copy[deletedGroupId];
+      return copy;
+    });
+    setGroupProgress((prev) => {
+      const copy = { ...prev };
+      delete copy[deletedGroupId];
+      return copy;
+    });
+    setDeleteGroupOpen(false);
+    setGroupToDelete(null);
+
     try {
-      setSaving(true);
-      await deleteGroup(groupToDelete.id);
-      setGroups((prev) => prev.filter((g) => g.id !== groupToDelete.id));
-      setGroupMembers((prev) => {
-        const copy = { ...prev };
-        delete copy[groupToDelete.id];
-        return copy;
-      });
-      setGroupProgress((prev) => {
-        const copy = { ...prev };
-        delete copy[groupToDelete.id];
-        return copy;
-      });
-      setDeleteGroupOpen(false);
-      setGroupToDelete(null);
-      toast({ title: "Group deleted" });
+      setDeletingId(deletedGroupId);
+      await deleteGroup(deletedGroupId);
+      toast({ title: "Group deleted", description: deletedGroupName });
     } catch (error: any) {
+      // Rollback optimistic update
+      setGroups(previousGroups);
+      setGroupMembers(previousMembers);
+      setGroupProgress(previousProgress);
+
       toast({
         title: "Error deleting group",
         description: error?.message || "Failed to delete group",
         variant: "destructive",
       });
     } finally {
-      setSaving(false);
+      setDeletingId(null);
     }
   };
 
@@ -380,6 +491,7 @@ const GroupsSection = () => {
       endDate: "",
       primaryInstructorId: null,
     });
+    setFormErrors({});
   };
 
   const openEditDialog = (group: Group) => {
@@ -433,7 +545,7 @@ const GroupsSection = () => {
                   className="pl-10"
                 />
               </div>
-              <Select value={statusFilter} onValueChange={(value: "all" | "active" | "inactive" | "completed") => setStatusFilter(value)}>
+              <Select value={statusFilter} onValueChange={(value: "all" | "active" | "completed" | "cancelled") => setStatusFilter(value)}>
                 <SelectTrigger className="w-[180px]">
                   <Filter className="mr-2 h-4 w-4" />
                   <SelectValue />
@@ -441,16 +553,43 @@ const GroupsSection = () => {
                 <SelectContent>
                   <SelectItem value="all">All Groups</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </CardContent>
         </Card>
 
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading groups...</p>
+            </div>
+          </div>
+        )}
+
+        {!loading && filteredGroups.length === 0 && (
+          <Card className="p-8 text-center">
+            <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">No Groups Found</h3>
+            <p className="text-muted-foreground mb-4">
+              {searchTerm || statusFilter !== "all" 
+                ? "No groups match your search criteria." 
+                : "Get started by creating your first group."}
+            </p>
+            {!searchTerm && statusFilter === "all" && (
+              <Button onClick={() => setCreateGroupOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Group
+              </Button>
+            )}
+          </Card>
+        )}
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredGroups.map((group) => {
+          {!loading && filteredGroups.map((group) => {
             const groupStudents = groupMembers[group.id] || [];
             const progressData = groupProgress[group.id] || { total: 0, completed: 0, percent: 0 };
 
@@ -528,7 +667,7 @@ const GroupsSection = () => {
           })}
         </div>
 
-        {unassignedStudents.length > 0 && (
+        {!loading && unassignedStudents.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -582,13 +721,20 @@ const GroupsSection = () => {
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Group Name</Label>
+                <Label htmlFor="name">Group Name *</Label>
                 <Input
                   id="name"
                   value={groupFormData.name}
-                  onChange={(e) => setGroupFormData({ ...groupFormData, name: e.target.value })}
+                  onChange={(e) => {
+                    setGroupFormData({ ...groupFormData, name: e.target.value });
+                    if (formErrors.name) setFormErrors({ ...formErrors, name: undefined });
+                  }}
                   placeholder="Enter group name"
+                  className={formErrors.name ? "border-red-500" : ""}
                 />
+                {formErrors.name && (
+                  <p className="text-sm text-red-500">{formErrors.name}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description">Description (Optional)</Label>
@@ -601,33 +747,44 @@ const GroupsSection = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="capacity">Capacity</Label>
+                  <Label htmlFor="capacity">Capacity *</Label>
                   <Input
                     id="capacity"
                     type="number"
                     value={groupFormData.capacity}
-                    onChange={(e) =>
-                      setGroupFormData({ ...groupFormData, capacity: parseInt(e.target.value) || 1 })
-                    }
+                    onChange={(e) => {
+                      setGroupFormData({ ...groupFormData, capacity: parseInt(e.target.value) || 1 });
+                      if (formErrors.capacity) setFormErrors({ ...formErrors, capacity: undefined });
+                    }}
                     min="1"
                     max="50"
+                    className={formErrors.capacity ? "border-red-500" : ""}
                   />
+                  {formErrors.capacity && (
+                    <p className="text-sm text-red-500">{formErrors.capacity}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
+                  <Label htmlFor="status">Status *</Label>
                   <Select
                     value={groupFormData.status}
-                    onValueChange={(value: Group["status"]) => setGroupFormData({ ...groupFormData, status: value })}
+                    onValueChange={(value: Group["status"]) => {
+                      setGroupFormData({ ...groupFormData, status: value });
+                      if (formErrors.status) setFormErrors({ ...formErrors, status: undefined });
+                    }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={formErrors.status ? "border-red-500" : ""}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
+                  {formErrors.status && (
+                    <p className="text-sm text-red-500">{formErrors.status}</p>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

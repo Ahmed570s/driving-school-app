@@ -13,7 +13,7 @@ export interface DatabaseGroup {
   description: string | null;
   capacity: number;
   current_enrollment: number;
-  status: 'active' | 'inactive' | 'completed';
+  status: 'active' | 'completed' | 'cancelled';
   start_date: string | null; // ISO date string
   end_date: string | null; // ISO date string
   primary_instructor_id: string | null;
@@ -38,7 +38,7 @@ export interface Group {
   capacity: number;
   currentEnrollment: number;
   availableSpots: number; // calculated field
-  status: 'active' | 'inactive' | 'completed';
+  status: 'active' | 'completed' | 'cancelled';
   startDate: string; // YYYY-MM-DD format or empty
   endDate: string; // YYYY-MM-DD format or empty
   primaryInstructor: {
@@ -61,13 +61,13 @@ export interface GroupOption {
   capacity: number;
   currentEnrollment: number;
   availableSpots: number;
-  status: 'active' | 'inactive' | 'completed';
+  status: 'active' | 'completed' | 'cancelled';
   isFull: boolean;
 }
 
 // Filter options for fetching groups
 export interface GroupFilters {
-  status?: 'active' | 'inactive' | 'completed';
+  status?: 'active' | 'completed' | 'cancelled';
   hasAvailableSpots?: boolean;
   instructorId?: string;
 }
@@ -77,7 +77,7 @@ export interface GroupInput {
   name: string;
   description?: string;
   capacity: number;
-  status: 'active' | 'inactive' | 'completed';
+  status: 'active' | 'completed' | 'cancelled';
   startDate?: string | null;
   endDate?: string | null;
   primaryInstructorId?: string | null;
@@ -616,8 +616,8 @@ export const setClassGroup = async (classId: string, groupId: string | null): Pr
 export const getGroupStats = async (): Promise<{
   total: number;
   active: number;
-  inactive: number;
   completed: number;
+  cancelled: number;
   totalCapacity: number;
   totalEnrollment: number;
   averageEnrollment: number;
@@ -630,7 +630,7 @@ export const getGroupStats = async (): Promise<{
     
     // Calculate stats from the fetched groups
     const activeGroups = allGroups.filter(group => group.status === 'active');
-    const inactiveGroups = allGroups.filter(group => group.status === 'inactive');
+    const cancelledGroups = allGroups.filter(group => group.status === 'cancelled');
     const completedGroups = allGroups.filter(group => group.status === 'completed');
     
     const totalCapacity = allGroups.reduce((sum, group) => sum + group.capacity, 0);
@@ -642,7 +642,7 @@ export const getGroupStats = async (): Promise<{
     const stats = {
       total: allGroups.length,
       active: activeGroups.length,
-      inactive: inactiveGroups.length,
+      cancelled: cancelledGroups.length,
       completed: completedGroups.length,
       totalCapacity,
       totalEnrollment,
