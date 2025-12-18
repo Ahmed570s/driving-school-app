@@ -50,9 +50,19 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "@/components/ui/use-toast";
-import { Student, Document } from "@/data/students";
+import { Student } from "@/data/students";
 import { getStudentById, updateStudent, deleteStudent } from "@/services/students";
 import { getClassesByStudent, ClassItem } from "@/services/classes";
+import { 
+  Document as DocumentType,
+  getStudentDocuments, 
+  uploadDocument, 
+  deleteDocument as deleteDocumentService,
+  getSignedUrl,
+  validateFile,
+  ALLOWED_TYPES_DISPLAY,
+  MAX_FILE_SIZE_MB
+} from "@/services/documents";
 
 // Types
 interface Session {
@@ -140,6 +150,25 @@ const StudentProfile = ({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [classesLoading, setClassesLoading] = useState(false);
+  
+  // Document state
+  const [documents, setDocuments] = useState<DocumentType[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [deleteDocConfirmOpen, setDeleteDocConfirmOpen] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<DocumentType | null>(null);
+  const [deletingDocument, setDeletingDocument] = useState(false);
+  
+  // Upload form state
+  const [uploadForm, setUploadForm] = useState({
+    file: null as File | null,
+    name: '',
+    documentType: 'id' as string,
+    description: '',
+    expiryDate: '',
+  });
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   // Helper function to determine phase from class title
   const getPhaseFromClassTitle = (title: string, type: string): 1 | 2 | 3 | 4 => {
@@ -270,20 +299,23 @@ const StudentProfile = ({
       try {
         setLoading(true);
         setClassesLoading(true);
+        setDocumentsLoading(true);
         
-        // Load student and classes in parallel
-        const [studentData, studentClasses] = await Promise.all([
+        // Load student, classes, and documents in parallel
+        const [studentData, studentClasses, studentDocs] = await Promise.all([
           getStudentById(studentId),
-          getClassesByStudent(studentId)
+          getClassesByStudent(studentId),
+          getStudentDocuments(studentId)
         ]);
         
         setStudent(studentData);
+        setDocuments(studentDocs);
         
         // Merge real classes with template
         const mergedSessions = mergeClassesWithTemplate(studentClasses, sessionTemplate);
         setSessions(mergedSessions);
         
-        console.log(`✅ Loaded student with ${studentClasses.length} classes, merged into ${mergedSessions.length} sessions`);
+        console.log(`✅ Loaded student with ${studentClasses.length} classes, ${studentDocs.length} documents, merged into ${mergedSessions.length} sessions`);
   
         // Initialize edit mode if needed
         if (initialEditMode && studentData && !editedStudent) {
@@ -299,6 +331,7 @@ const StudentProfile = ({
       } finally {
         setLoading(false);
         setClassesLoading(false);
+        setDocumentsLoading(false);
       }
     };
 
@@ -479,6 +512,179 @@ const StudentProfile = ({
     }
   };
 
+  // Document handlers
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file before accepting
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      toast({
+        title: "Invalid File",
+        description: validation.error,
+        variant: "destructive"
+      });
+      // Reset the input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    // Auto-fill name from filename (without extension)
+    const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
+    
+    setUploadForm(prev => ({
+      ...prev,
+      file,
+      name: prev.name || nameWithoutExt,
+    }));
+  };
+
+  const resetUploadForm = () => {
+    setUploadForm({
+      file: null,
+      name: '',
+      documentType: 'ID',
+      description: '',
+      expiryDate: '',
+    });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleUploadDocument = async () => {
+    if (!uploadForm.file || !uploadForm.name || !studentId) {
+      toast({
+        title: "Missing Information",
+        description: "Please select a file and provide a document name.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setUploadingDocument(true);
+
+      const newDoc = await uploadDocument(
+        uploadForm.file,
+        studentId,
+        uploadForm.documentType,
+        uploadForm.name,
+        uploadForm.description || undefined,
+        uploadForm.expiryDate || undefined
+      );
+
+      // Add to local state
+      setDocuments(prev => [newDoc, ...prev]);
+      
+      toast({
+        title: "Document Uploaded! 📄",
+        description: `${uploadForm.name} has been uploaded successfully.`,
+      });
+
+      // Close dialog and reset form
+      setUploadDialogOpen(false);
+      resetUploadForm();
+
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload Failed",
+        description: error.message || "Failed to upload document. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const handleViewDocument = async (doc: DocumentType) => {
+    try {
+      const url = await getSignedUrl(doc.filePath);
+      if (url) {
+        // Open in new tab with noopener for security
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        toast({
+          title: "Error",
+          description: "Could not generate download link.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to open document.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDownloadDocument = async (doc: DocumentType) => {
+    try {
+      const url = await getSignedUrl(doc.filePath);
+      if (url) {
+        // Create a temporary link and trigger download
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = doc.fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        toast({
+          title: "Error",
+          description: "Could not generate download link.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to download document.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteDocumentClick = (doc: DocumentType) => {
+    setDocumentToDelete(doc);
+    setDeleteDocConfirmOpen(true);
+  };
+
+  const handleConfirmDeleteDocument = async () => {
+    if (!documentToDelete) return;
+
+    try {
+      setDeletingDocument(true);
+      
+      await deleteDocumentService(documentToDelete.id);
+      
+      // Remove from local state
+      setDocuments(prev => prev.filter(d => d.id !== documentToDelete.id));
+      
+      toast({
+        title: "Document Deleted",
+        description: `${documentToDelete.name} has been removed.`,
+      });
+
+      setDeleteDocConfirmOpen(false);
+      setDocumentToDelete(null);
+
+    } catch (error: any) {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete document.",
+        variant: "destructive"
+      });
+    } finally {
+      setDeletingDocument(false);
+    }
+  };
+
   const getPhaseColor = (phase: number) => {
     const colors = { 1: "bg-red-100 text-red-800", 2: "bg-yellow-100 text-yellow-800", 3: "bg-blue-100 text-blue-800", 4: "bg-green-100 text-green-800" };
     return colors[phase as keyof typeof colors];
@@ -505,14 +711,18 @@ const StudentProfile = ({
   };
 
   const getDocumentTypeColor = (type: string) => {
-    const colors = {
-      "ID": "bg-blue-100 text-blue-800",
-      "Medical": "bg-green-100 text-green-800", 
-      "Insurance": "bg-purple-100 text-purple-800",
-      "License": "bg-orange-100 text-orange-800",
-      "Other": "bg-gray-100 text-gray-800"
+    const colors: Record<string, string> = {
+      "id": "bg-blue-100 text-blue-800",
+      "medical": "bg-green-100 text-green-800", 
+      "insurance": "bg-purple-100 text-purple-800",
+      "license": "bg-orange-100 text-orange-800",
+      "permit": "bg-yellow-100 text-yellow-800",
+      "contract": "bg-indigo-100 text-indigo-800",
+      "receipt": "bg-pink-100 text-pink-800",
+      "test": "bg-cyan-100 text-cyan-800",
+      "other": "bg-gray-100 text-gray-800"
     };
-    return colors[type as keyof typeof colors] || colors.Other;
+    return colors[type.toLowerCase()] || colors.other;
   };
 
   const getStatusColor = (status: string) => {
@@ -1068,16 +1278,21 @@ const StudentProfile = ({
               <div className="flex justify-between items-center">
                 <CardTitle className="flex items-center gap-2">
                   <Files className="h-5 w-5" />
-                  Documents ({student.documents.length})
+                  Documents ({documents.length})
                 </CardTitle>
-                <Button>
+                <Button onClick={() => setUploadDialogOpen(true)}>
                   <Upload className="mr-2 h-4 w-4" />
                   Upload New Document
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              {student.documents.length === 0 ? (
+              {documentsLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Loading documents...</p>
+                </div>
+              ) : documents.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Files className="mx-auto h-12 w-12 mb-4 text-muted-foreground/50" />
                   <p>No documents uploaded yet</p>
@@ -1085,36 +1300,59 @@ const StudentProfile = ({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {student.documents.map((document) => (
-                    <div key={document.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                  {documents.map((doc) => (
+                    <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
-                        {getDocumentIcon(document.fileType)}
+                        {getDocumentIcon(doc.mimeType.includes('pdf') ? 'pdf' : doc.mimeType.includes('image') ? 'jpg' : 'other')}
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-medium">{document.name}</h4>
-                            <Badge variant="outline" className={getDocumentTypeColor(document.type)}>
-                              {document.type}
+                            <h4 className="font-medium">{doc.name}</h4>
+                            <Badge variant="outline" className={getDocumentTypeColor(doc.documentType)}>
+                              {doc.documentType}
                             </Badge>
-                            <Badge variant="outline" className={getStatusColor(document.status)}>
-                              {document.status.charAt(0).toUpperCase() + document.status.slice(1)}
+                            <Badge variant="outline" className={getStatusColor(doc.status)}>
+                              {doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <span>Size: {document.size}</span>
-                            <span>Uploaded: {format(new Date(document.uploadDate), 'MMM d, yyyy')}</span>
-                            <span className="uppercase">{document.fileType}</span>
+                            <span>Size: {doc.fileSizeFormatted}</span>
+                            <span>Uploaded: {format(new Date(doc.createdAt), 'MMM d, yyyy')}</span>
+                            {doc.expiryDate && (
+                              <span className="text-orange-600">
+                                Expires: {format(new Date(doc.expiryDate), 'MMM d, yyyy')}
+                              </span>
+                            )}
                           </div>
+                          {doc.description && (
+                            <p className="text-sm text-muted-foreground mt-1">{doc.description}</p>
+                          )}
                         </div>
                       </div>
                       
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" title="Download">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          title="Download"
+                          onClick={() => handleDownloadDocument(doc)}
+                        >
                           <Download className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" title="View">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          title="View"
+                          onClick={() => handleViewDocument(doc)}
+                        >
                           <ExternalLink className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" title="Delete" className="text-red-600 hover:text-red-700">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          title="Delete" 
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => handleDeleteDocumentClick(doc)}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -1128,25 +1366,10 @@ const StudentProfile = ({
                 <div className="flex items-start gap-2">
                   <Shield className="h-5 w-5 text-blue-600 mt-0.5" />
                   <div>
-                    <h4 className="font-medium mb-2">Required Documents</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        <span>Photo ID (Driver's License/Passport)</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        <span>Medical Certificate</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Circle className="h-4 w-4 text-muted-foreground" />
-                        <span>Insurance Proof</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Circle className="h-4 w-4 text-muted-foreground" />
-                        <span>Vision Test Results</span>
-                      </div>
-                    </div>
+                    <h4 className="font-medium mb-2">Accepted File Types</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {ALLOWED_TYPES_DISPLAY} • Maximum size: {MAX_FILE_SIZE_MB}MB
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1247,6 +1470,201 @@ const StudentProfile = ({
                 <>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete Student
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Document Dialog */}
+      <Dialog open={uploadDialogOpen} onOpenChange={(open) => {
+        setUploadDialogOpen(open);
+        if (!open) resetUploadForm();
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Upload Document
+            </DialogTitle>
+            <DialogDescription>
+              Upload a document for {student?.firstName} {student?.lastName}. 
+              Accepted formats: {ALLOWED_TYPES_DISPLAY} (max {MAX_FILE_SIZE_MB}MB)
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* File Input */}
+            <div className="space-y-2">
+              <Label htmlFor="file">Select File *</Label>
+              <div className="flex gap-2">
+                <Input
+                  ref={fileInputRef}
+                  id="file"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={handleFileSelect}
+                  className="flex-1"
+                />
+              </div>
+              {uploadForm.file && (
+                <p className="text-sm text-muted-foreground">
+                  Selected: {uploadForm.file.name} ({(uploadForm.file.size / (1024 * 1024)).toFixed(2)}MB)
+                </p>
+              )}
+            </div>
+
+            {/* Document Name */}
+            <div className="space-y-2">
+              <Label htmlFor="docName">Document Name *</Label>
+              <Input
+                id="docName"
+                value={uploadForm.name}
+                onChange={(e) => setUploadForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g., Driver's License, Medical Certificate"
+              />
+            </div>
+
+            {/* Document Type */}
+            <div className="space-y-2">
+              <Label htmlFor="docType">Document Type *</Label>
+              <Select 
+                value={uploadForm.documentType} 
+                onValueChange={(value) => setUploadForm(prev => ({ ...prev, documentType: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="id">ID Document</SelectItem>
+                  <SelectItem value="medical">Medical Certificate</SelectItem>
+                  <SelectItem value="insurance">Insurance</SelectItem>
+                  <SelectItem value="license">License</SelectItem>
+                  <SelectItem value="permit">Permit</SelectItem>
+                  <SelectItem value="contract">Contract</SelectItem>
+                  <SelectItem value="receipt">Receipt</SelectItem>
+                  <SelectItem value="test">Test Results</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+              <Label htmlFor="docDescription">Description (optional)</Label>
+              <Textarea
+                id="docDescription"
+                value={uploadForm.description}
+                onChange={(e) => setUploadForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Add any notes about this document..."
+                rows={2}
+              />
+            </div>
+
+            {/* Expiry Date */}
+            <div className="space-y-2">
+              <Label htmlFor="expiryDate">Expiry Date (optional)</Label>
+              <Input
+                id="expiryDate"
+                type="date"
+                value={uploadForm.expiryDate}
+                onChange={(e) => setUploadForm(prev => ({ ...prev, expiryDate: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Set an expiry date for documents like licenses or certificates
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                setUploadDialogOpen(false);
+                resetUploadForm();
+              }}
+              disabled={uploadingDocument}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="button" 
+              onClick={handleUploadDocument}
+              disabled={uploadingDocument || !uploadForm.file || !uploadForm.name}
+            >
+              {uploadingDocument ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Document
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Document Confirmation Dialog */}
+      <Dialog open={deleteDocConfirmOpen} onOpenChange={setDeleteDocConfirmOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Document
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this document? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {documentToDelete && (
+            <div className="py-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-8 w-8 text-red-600" />
+                  <div>
+                    <h3 className="font-medium text-red-900">{documentToDelete.name}</h3>
+                    <p className="text-sm text-red-700">Type: {documentToDelete.documentType}</p>
+                    <p className="text-sm text-red-700">Size: {documentToDelete.fileSizeFormatted}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter className="gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                setDeleteDocConfirmOpen(false);
+                setDocumentToDelete(null);
+              }}
+              disabled={deletingDocument}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="button" 
+              variant="destructive" 
+              onClick={handleConfirmDeleteDocument}
+              disabled={deletingDocument}
+            >
+              {deletingDocument ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Document
                 </>
               )}
             </Button>
