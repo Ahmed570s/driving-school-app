@@ -1,5 +1,6 @@
 // Groups Service Layer - Handles all database operations for student groups
 import { supabase } from '@/lib/supabaseClient';
+import { logCreate, logUpdate, logDelete, logActivity } from './activityLogs';
 
 // ============================================================================
 // TYPES - What data looks like coming from the database
@@ -380,7 +381,16 @@ export const createGroup = async (input: GroupInput): Promise<Group> => {
     }
 
     console.log('✅ Group created');
-    return convertToGroup(data as DatabaseGroup);
+    
+    const group = convertToGroup(data as DatabaseGroup);
+    
+    // Log the activity
+    await logCreate('group', group.id, group.name, {
+      capacity: input.capacity,
+      status: input.status,
+    });
+    
+    return group;
   } catch (error) {
     console.error('💥 Error in createGroup:', error);
     throw error;
@@ -424,7 +434,13 @@ export const updateGroup = async (id: string, updates: Partial<GroupInput>): Pro
     }
 
     console.log('✅ Group updated');
-    return convertToGroup(data as DatabaseGroup);
+    
+    const group = convertToGroup(data as DatabaseGroup);
+    
+    // Log the activity
+    await logUpdate('group', id, group.name, {}, updates);
+    
+    return group;
   } catch (error) {
     console.error('💥 Error in updateGroup:', error);
     throw error;
@@ -437,6 +453,10 @@ export const updateGroup = async (id: string, updates: Partial<GroupInput>): Pro
 export const deleteGroup = async (id: string): Promise<void> => {
   try {
     console.log('🗑️ Deleting group...', id);
+
+    // Get group info before deleting for logging
+    const groupToDelete = await getGroupById(id);
+    const groupName = groupToDelete?.name || `Group ${id}`;
 
     // Detach group from classes
     const { error: classError } = await supabase
@@ -470,6 +490,9 @@ export const deleteGroup = async (id: string): Promise<void> => {
       console.error('❌ Error deleting group:', groupError);
       throw new Error(`Failed to delete group: ${groupError.message}`);
     }
+
+    // Log the deletion
+    await logDelete('group', id, groupName);
 
     console.log('✅ Group deleted');
   } catch (error) {
@@ -545,6 +568,15 @@ export const addStudentToGroup = async (
       await recalcGroupEnrollment(groupId);
     }
 
+    // Log the activity
+    await logActivity({
+      actionType: 'update',
+      entityType: 'group',
+      entityId: groupId,
+      description: `Added student to group`,
+      newValues: { studentId, status },
+    });
+
     console.log('✅ Student added to group');
   } catch (error) {
     console.error('💥 Error in addStudentToGroup:', error);
@@ -571,6 +603,16 @@ export const removeStudentFromGroup = async (groupId: string, studentId: string)
     }
 
     await recalcGroupEnrollment(groupId);
+    
+    // Log the activity
+    await logActivity({
+      actionType: 'update',
+      entityType: 'group',
+      entityId: groupId,
+      description: `Removed student from group`,
+      oldValues: { studentId },
+    });
+    
     console.log('✅ Student removed from group');
   } catch (error) {
     console.error('💥 Error in removeStudentFromGroup:', error);

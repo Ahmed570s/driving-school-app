@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
+import { logLogin, logLogout } from '@/services/activityLogs';
 
 // Debug flag - set to true to bypass Supabase temporarily
 const DEBUG_SKIP_SUPABASE = false;
@@ -164,6 +165,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // This prevents conflicts and duplicate state updates
       if (data.user) {
         const userRole = await fetchUserRole(data.user.id);
+        
+        // Log the login activity
+        await logLogin(data.user.email || 'Unknown user');
+        
         return userRole;
       }
       
@@ -179,6 +184,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async (): Promise<void> => {
     try {
       console.log('🔄 AuthContext: Starting logout...');
+      
+      // Log the logout activity before signing out (while we still have user info)
+      if (user?.email) {
+        await logLogout(user.email);
+      }
       
       const { error } = await supabase.auth.signOut();
       

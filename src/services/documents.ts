@@ -1,5 +1,6 @@
 // Document Service Layer - Handles file uploads and document management
 import { supabase } from '@/lib/supabaseClient';
+import { logCreate, logDelete } from './activityLogs';
 
 // ============================================================================
 // CONSTANTS - File validation rules (must match Supabase bucket config)
@@ -498,6 +499,13 @@ export const deleteDocument = async (documentId: string): Promise<void> => {
       throw new Error(`Failed to delete document: ${error.message}`);
     }
 
+    // Log the deletion
+    await logDelete('document', documentId, doc.name, {
+      documentType: doc.documentType,
+      fileName: doc.fileName,
+      studentId: doc.studentId,
+    });
+
     console.log('✅ Document deleted successfully');
 
   } catch (error: any) {
@@ -545,6 +553,15 @@ export const uploadDocument = async (
     });
 
     console.log('✅ Document upload complete:', document.id);
+    
+    // Log the activity
+    await logCreate('document', document.id, name, {
+      documentType,
+      fileName: file.name,
+      fileSize: file.size,
+      studentId,
+    });
+    
     return document;
 
   } catch (error: any) {

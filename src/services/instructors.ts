@@ -1,5 +1,6 @@
 // Instructors Service Layer - Handles all database operations for instructors
 import { supabase } from '@/lib/supabaseClient';
+import { logCreate, logUpdate, logDelete } from './activityLogs';
 
 // ============================================================================
 // TYPES - What data looks like coming from the database
@@ -479,7 +480,16 @@ export const createInstructor = async (input: InstructorInput): Promise<Instruct
     }
 
     console.log('✅ Instructor created');
-    return convertToInstructor(instructorData as DatabaseInstructor);
+    
+    // Log the activity
+    const instructor = convertToInstructor(instructorData as DatabaseInstructor);
+    await logCreate('instructor', instructor.id, instructor.fullName, {
+      email: input.email,
+      employeeId: instructor.employeeId,
+      status: input.status || 'active',
+    });
+    
+    return instructor;
   } catch (error) {
     console.error('💥 Error in createInstructor:', error);
     throw error;
@@ -548,6 +558,10 @@ export const updateInstructor = async (id: string, updates: Partial<InstructorIn
     // Return fresh record
     const updated = await getInstructorById(id);
     if (!updated) throw new Error('Failed to fetch updated instructor');
+    
+    // Log the activity
+    await logUpdate('instructor', id, updated.fullName, {}, updates);
+    
     return updated;
   } catch (error) {
     console.error('💥 Error in updateInstructor:', error);
@@ -592,6 +606,9 @@ export const deleteInstructor = async (id: string): Promise<void> => {
       console.error('⚠️ Instructor deleted but profile cleanup failed:', profileDeleteError);
       throw new Error('Instructor deleted but profile cleanup failed');
     }
+
+    // Log the deletion
+    await logDelete('instructor', id, `Instructor ${id}`);
 
     console.log('✅ Instructor deleted');
   } catch (error) {

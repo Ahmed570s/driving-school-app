@@ -1,5 +1,6 @@
 // Classes Service Layer - Handles all database operations for classes/lessons
 import { supabase } from '@/lib/supabaseClient';
+import { logActivity, logClassScheduled, logClassCompleted, logUpdate, logDelete } from './activityLogs';
 
 // ============================================================================
 // TYPES - What data looks like coming from the database
@@ -479,7 +480,18 @@ export const createClass = async (classData: ClassFormData): Promise<ClassItem> 
     }
 
     console.log('✅ Successfully created class');
-    return convertToClassItem(data);
+    
+    const classItem = convertToClassItem(data);
+    
+    // Log the class scheduling
+    await logClassScheduled(
+      classItem.id,
+      classItem.className,
+      classItem.date,
+      classItem.instructor
+    );
+    
+    return classItem;
 
   } catch (error) {
     console.error('💥 Error in createClass:', error);
@@ -637,6 +649,14 @@ export const updateClass = async (id: string, updates: Partial<ClassItem>): Prom
     }
 
     console.log('✅ Successfully updated and fetched class:', updatedClass);
+    
+    // Log the update - check if status changed to completed
+    if (updates.status === 'completed') {
+      await logClassCompleted(updatedClass.id, updatedClass.className, updatedClass.student);
+    } else {
+      await logUpdate('class', id, updatedClass.className, {}, updates);
+    }
+    
     return updatedClass;
 
   } catch (error) {
@@ -652,6 +672,10 @@ export const deleteClass = async (id: string): Promise<void> => {
   try {
     console.log('🔍 Deleting class:', id);
 
+    // Get class info before deleting for logging
+    const classToDelete = await getClassById(id);
+    const className = classToDelete?.className || `Class ${id}`;
+
     const { error } = await supabase
       .from('classes')
       .delete()
@@ -661,6 +685,9 @@ export const deleteClass = async (id: string): Promise<void> => {
       console.error('❌ Error deleting class:', error);
       throw new Error('Failed to delete class from database');
     }
+
+    // Log the deletion
+    await logDelete('class', id, className);
 
     console.log('✅ Successfully deleted class');
 

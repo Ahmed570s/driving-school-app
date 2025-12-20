@@ -1,6 +1,7 @@
 // Student Service Layer - Handles all database operations for students
 import { supabase } from '@/lib/supabaseClient';
 import { BasicStudent, Student } from '@/data/students';
+import { logCreate, logUpdate, logDelete } from './activityLogs';
 
 // ============================================================================
 // TYPES - What data looks like coming from the database
@@ -432,6 +433,13 @@ export const createStudent = async (studentData: {
 
     console.log('✅ Student created:', studentRecord);
 
+    // Log the activity
+    await logCreate('student', studentRecord.id, `${studentData.firstName} ${studentData.lastName}`, {
+      studentId,
+      email: studentData.email,
+      status: studentData.status || 'active',
+    });
+
     // Step 5: Return the complete student object
     const completeStudent: Student = {
       id: studentRecord.id,
@@ -538,6 +546,15 @@ export const updateStudent = async (studentId: string, updates: Partial<Student>
       throw new Error('Failed to fetch updated student');
     }
 
+    // Log the activity with changes
+    await logUpdate(
+      'student',
+      studentId,
+      `${updatedStudent.firstName} ${updatedStudent.lastName}`,
+      {}, // We don't have old data easily available here
+      updates
+    );
+
     return updatedStudent;
 
   } catch (error) {
@@ -593,6 +610,9 @@ export const deleteStudent = async (studentId: string): Promise<void> => {
       // In a production app, you might want to implement a cleanup job
       throw new Error('Student deleted but profile cleanup failed');
     }
+
+    // Log the deletion
+    await logDelete('student', studentId, `Student ${studentId}`);
 
     console.log('✅ Student and profile deleted successfully');
 
