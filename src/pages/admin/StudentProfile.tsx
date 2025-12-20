@@ -627,13 +627,30 @@ const StudentProfile = ({
     try {
       const url = await getSignedUrl(doc.filePath);
       if (url) {
+        // Fetch the file as a blob to enable proper download
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error('Failed to fetch file');
+        }
+        
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
         // Create a temporary link and trigger download
         const link = document.createElement('a');
-        link.href = url;
+        link.href = blobUrl;
         link.download = doc.fileName;
         document.body.appendChild(link);
         link.click();
+        
+        // Cleanup
         document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+        
+        toast({
+          title: "Download Started",
+          description: `Downloading ${doc.fileName}...`,
+        });
       } else {
         toast({
           title: "Error",
@@ -642,6 +659,7 @@ const StudentProfile = ({
         });
       }
     } catch (error) {
+      console.error('Download error:', error);
       toast({
         title: "Error",
         description: "Failed to download document.",
