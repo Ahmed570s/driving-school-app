@@ -477,13 +477,37 @@ export const getActivityStats = async (): Promise<{
 // ============================================================================
 
 /**
+ * Helper to capitalize first letter
+ */
+const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
+
+/**
+ * Helper to format entity type for display
+ */
+const formatEntityType = (type: string) => {
+  const typeMap: Record<string, string> = {
+    'student': 'Student',
+    'instructor': 'Instructor',
+    'class': 'Class',
+    'group': 'Group',
+    'document': 'Document',
+    'payment': 'Payment',
+    'certificate': 'Certificate',
+    'user': 'User',
+  };
+  return typeMap[type] || capitalize(type);
+};
+
+/**
  * Log a login event
  */
 export const logLogin = async (userEmail: string): Promise<void> => {
+  // Extract name from email (before @)
+  const name = userEmail.split('@')[0].replace(/[._]/g, ' ');
   await logActivity({
     actionType: 'login',
     entityType: 'user',
-    description: `User ${userEmail} logged in`,
+    description: `${capitalize(name)} signed in`,
     logLevel: 'info',
   });
 };
@@ -492,10 +516,11 @@ export const logLogin = async (userEmail: string): Promise<void> => {
  * Log a logout event
  */
 export const logLogout = async (userEmail: string): Promise<void> => {
+  const name = userEmail.split('@')[0].replace(/[._]/g, ' ');
   await logActivity({
     actionType: 'logout',
     entityType: 'user',
-    description: `User ${userEmail} logged out`,
+    description: `${capitalize(name)} signed out`,
     logLevel: 'info',
   });
 };
@@ -513,7 +538,7 @@ export const logCreate = async (
     actionType: 'create',
     entityType,
     entityId,
-    description: `Created ${entityType}: ${entityName}`,
+    description: `New ${entityType}: ${entityName}`,
     logLevel: 'info',
     newValues: newData,
   });
@@ -531,17 +556,20 @@ export const logUpdate = async (
 ): Promise<void> => {
   const { oldValues, newValues } = getChangedFields(oldData, newData);
   
-  // Build a description of what changed
+  // Build a short description of what changed
   const changedKeys = Object.keys(newValues || {});
-  const changesSummary = changedKeys.length > 0 
-    ? ` (${changedKeys.join(', ')})` 
-    : '';
+  let changesSummary = '';
+  if (changedKeys.length === 1) {
+    changesSummary = ` → ${changedKeys[0]}`;
+  } else if (changedKeys.length > 1) {
+    changesSummary = ` → ${changedKeys.length} fields`;
+  }
   
   await logActivity({
     actionType: 'update',
     entityType,
     entityId,
-    description: `Updated ${entityType}: ${entityName}${changesSummary}`,
+    description: `Updated ${entityName}${changesSummary}`,
     logLevel: 'info',
     oldValues: oldValues || undefined,
     newValues: newValues || undefined,
@@ -561,8 +589,8 @@ export const logDelete = async (
     actionType: 'delete',
     entityType,
     entityId,
-    description: `Deleted ${entityType}: ${entityName}`,
-    logLevel: 'warning', // Deletions are warnings
+    description: `Deleted ${entityName}`,
+    logLevel: 'warning',
     oldValues: oldData,
   });
 };
@@ -576,11 +604,13 @@ export const logClassScheduled = async (
   date: string,
   instructor?: string
 ): Promise<void> => {
+  // Format date to be shorter (e.g., "Dec 22")
+  const shortDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   await logActivity({
     actionType: 'class_scheduled',
     entityType: 'class',
     entityId: classId,
-    description: `Scheduled ${className} for ${date}${instructor ? ` with ${instructor}` : ''}`,
+    description: `${className} scheduled for ${shortDate}`,
     logLevel: 'info',
   });
 };
@@ -597,7 +627,7 @@ export const logClassCompleted = async (
     actionType: 'class_completed',
     entityType: 'class',
     entityId: classId,
-    description: `Completed ${className}${studentName ? ` for ${studentName}` : ''}`,
+    description: studentName ? `${studentName} completed ${className}` : `${className} completed`,
     logLevel: 'info',
   });
 };
@@ -614,7 +644,7 @@ export const logCertificateIssued = async (
     actionType: 'certificate_issued',
     entityType: 'certificate',
     entityId: certificateId,
-    description: `Issued ${certificateType} certificate to ${studentName}`,
+    description: `${certificateType} issued to ${studentName}`,
     logLevel: 'info',
   });
 };
@@ -632,7 +662,7 @@ export const logPayment = async (
     actionType: 'payment',
     entityType: 'payment',
     entityId: paymentId,
-    description: description || `Payment of $${amount.toFixed(2)} received from ${studentName}`,
+    description: description || `$${amount.toFixed(2)} from ${studentName}`,
     logLevel: 'info',
   });
 };
@@ -646,7 +676,7 @@ export const logError = async (
   entityId?: string
 ): Promise<void> => {
   await logActivity({
-    actionType: 'view', // Using 'view' as a generic action for errors
+    actionType: 'view',
     entityType,
     entityId,
     description,

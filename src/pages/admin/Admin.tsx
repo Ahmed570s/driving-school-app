@@ -30,8 +30,10 @@ import CreateStudent from "./CreateStudent";
 // Import services for real data
 import { getInstructorOptions, InstructorOption } from "@/services/instructors";
 import { getGroupOptions, GroupOption } from "@/services/groups";
-import { getStudentsForScheduling, StudentOption } from "@/services/students";
-import { createClass, getClasses, ClassFormData } from "@/services/classes";
+import { getStudentsForScheduling, StudentOption, getStudentStats } from "@/services/students";
+import { createClass, getClasses, getUpcomingClasses, ClassFormData, ClassItem } from "@/services/classes";
+import { getActivityLogs, ActivityLog } from "@/services/activityLogs";
+import { addDays, startOfWeek, endOfWeek, isToday, isTomorrow } from "date-fns";
 
 // Predefined class titles based on driving school curriculum
 const THEORY_CLASS_TITLES = [
@@ -95,6 +97,22 @@ const Admin = () => {
   const [takenPracticalTitles, setTakenPracticalTitles] = useState<string[]>([]);
   const [titleLoading, setTitleLoading] = useState(false);
 
+  // Dashboard data state
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0); // Used to force refresh
+  const [studentStats, setStudentStats] = useState<{
+    total: number;
+    active: number;
+    onHold: number;
+    completed: number;
+    dropped: number;
+    averageHours: number;
+  }>({ total: 0, active: 0, onHold: 0, completed: 0, dropped: 0, averageHours: 0 });
+  const [classesThisWeek, setClassesThisWeek] = useState<number>(0);
+  const [totalHoursLogged, setTotalHoursLogged] = useState<number>(0);
+  const [recentActivities, setRecentActivities] = useState<ActivityLog[]>([]);
+  const [upcomingClasses, setUpcomingClasses] = useState<ClassItem[]>([]);
+
   // Protect admin route - redirect unauthenticated users
   useEffect(() => {
     if (!isLoading && (!isAuthenticated || role !== 'admin')) {
@@ -131,6 +149,55 @@ const Admin = () => {
       loadOptions();
     }
   }, [createClassModalOpen]);
+
+  // Load dashboard data when on dashboard section or when refresh key changes
+  useEffect(() => {
+    if (activeSection !== "dashboard") return;
+
+    const loadDashboardData = async () => {
+      setDashboardLoading(true);
+      try {
+        console.log('🔄 Loading dashboard data...');
+        // Load all dashboard data in parallel
+        const [stats, activities, upcoming, weekClasses] = await Promise.all([
+          getStudentStats(),
+          getActivityLogs({ limit: 5 }),
+          getUpcomingClasses(),
+          // Get classes for this week to count
+          getClasses({
+            startDate: format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+            endDate: format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+          }),
+        ]);
+
+        setStudentStats(stats);
+        setRecentActivities(activities);
+        setUpcomingClasses(upcoming.slice(0, 5)); // Only show 5 upcoming
+        setClassesThisWeek(weekClasses.length);
+
+        // Calculate total hours logged (from completed classes this month)
+        const completedClasses = weekClasses.filter(c => c.status === 'completed');
+        const totalMinutes = completedClasses.reduce((sum, c) => {
+          const durationMatch = c.duration?.match(/(\d+)/);
+          return sum + (durationMatch ? parseInt(durationMatch[1]) : 60);
+        }, 0);
+        setTotalHoursLogged(Math.round(totalMinutes / 60));
+        console.log('✅ Dashboard data loaded');
+
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+        toast({
+          title: "Error Loading Dashboard",
+          description: "Some dashboard data could not be loaded.",
+          variant: "destructive"
+        });
+      } finally {
+        setDashboardLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, [activeSection, dashboardRefreshKey]);
 
   // Load taken titles when group or student changes
   useEffect(() => {
@@ -429,6 +496,39 @@ const Admin = () => {
     }
   };
   
+  // Helper to format class date for display
+  const formatClassDate = (dateStr: string, timeStr: string) => {
+    const date = new Date(dateStr);
+    if (isToday(date)) {
+      return `Today, ${timeStr}`;
+    }
+    if (isTomorrow(date)) {
+      return `Tomorrow, ${timeStr}`;
+    }
+    return `${format(date, 'EEE, MMM d')}, ${timeStr}`;
+  };
+
+  // Helper to get icon for activity type
+  const getActivityIcon = (actionType: string) => {
+    switch (actionType) {
+      case 'create':
+        return <Plus className="h-4 w-4" />;
+      case 'update':
+        return <Settings className="h-4 w-4" />;
+      case 'delete':
+        return <Receipt className="h-4 w-4" />;
+      case 'login':
+      case 'logout':
+        return <UserRound className="h-4 w-4" />;
+      case 'class_scheduled':
+        return <Calendar className="h-4 w-4" />;
+      case 'class_completed':
+        return <Check className="h-4 w-4" />;
+      default:
+        return <Activity className="h-4 w-4" />;
+    }
+  };
+
   const renderActiveSection = () => {
     switch (activeSection) {
       case "students":
@@ -486,23 +586,29 @@ const Admin = () => {
                     <Users className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">152</div>
-                    <p className="text-xs text-muted-foreground">
-                      +12% from last month
-                    </p>
+                    {dashboardLoading ? (
+                      <div className="h-8 w-16 bg-muted animate-pulse rounded" />
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{studentStats.total}</div>
+                        <p className="text-xs text-muted-foreground">
+                          {studentStats.active} active, {studentStats.onHold} on hold
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
-                {/* Total Instructors Card */}
+                {/* Total Instructors Card - Keep as placeholder for now */}
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
                     <CardTitle className="text-sm font-medium">Total Instructors</CardTitle>
                     <UserRound className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">8</div>
+                    <div className="text-2xl font-bold">—</div>
                     <p className="text-xs text-muted-foreground">
-                      +1 new this month
+                      Coming soon
                     </p>
                   </CardContent>
                 </Card>
@@ -514,10 +620,16 @@ const Admin = () => {
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">24</div>
-                    <p className="text-xs text-muted-foreground">
-                      6 more than last week
-                    </p>
+                    {dashboardLoading ? (
+                      <div className="h-8 w-16 bg-muted animate-pulse rounded" />
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{classesThisWeek}</div>
+                        <p className="text-xs text-muted-foreground">
+                          {upcomingClasses.length} upcoming
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -528,10 +640,16 @@ const Admin = () => {
                     <Clock className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">128</div>
-                    <p className="text-xs text-muted-foreground">
-                      +18% from last month
-                    </p>
+                    {dashboardLoading ? (
+                      <div className="h-8 w-16 bg-muted animate-pulse rounded" />
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold">{totalHoursLogged}</div>
+                        <p className="text-xs text-muted-foreground">
+                          Avg {studentStats.averageHours} hrs/student
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -546,36 +664,34 @@ const Admin = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {/* Activities list */}
-                      {[{
-                        icon: <UserRound className="h-4 w-4" />,
-                        text: "John Smith registered as a new student",
-                        time: "2 minutes ago"
-                      }, {
-                        icon: <Calendar className="h-4 w-4" />,
-                        text: "Theory class scheduled for Group A",
-                        time: "1 hour ago"
-                      }, {
-                        icon: <Settings className="h-4 w-4" />,
-                        text: "Emma Wilson completed her course",
-                        time: "3 hours ago"
-                      }, {
-                        icon: <Receipt className="h-4 w-4" />,
-                        text: "Payment received from David Johnson",
-                        time: "Yesterday"
-                      }, {
-                        icon: <Users className="h-4 w-4" />,
-                        text: "New Group C created for weekend classes",
-                        time: "Yesterday"
-                      }].map((item, i) => <div key={i} className="flex items-center">
+                      {dashboardLoading ? (
+                        // Loading skeleton
+                        Array.from({ length: 5 }).map((_, i) => (
+                          <div key={i} className="flex items-center">
+                            <div className="mr-2 h-8 w-8 bg-muted animate-pulse rounded-full" />
+                            <div className="flex-1 ml-2 space-y-2">
+                              <div className="h-4 w-3/4 bg-muted animate-pulse rounded" />
+                              <div className="h-3 w-1/4 bg-muted animate-pulse rounded" />
+                            </div>
+                          </div>
+                        ))
+                      ) : recentActivities.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No recent activities
+                        </p>
+                      ) : (
+                        recentActivities.map((activity) => (
+                          <div key={activity.id} className="flex items-center">
                             <div className="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                              {item.icon}
+                              {getActivityIcon(activity.actionType)}
                             </div>
                             <div className="flex-1 ml-2">
-                              <p className="text-sm">{item.text}</p>
-                              <p className="text-xs text-muted-foreground">{item.time}</p>
+                              <p className="text-sm">{activity.description}</p>
+                              <p className="text-xs text-muted-foreground">{activity.timeAgo}</p>
                             </div>
-                          </div>)}
+                          </div>
+                        ))
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -588,40 +704,42 @@ const Admin = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {/* Classes list */}
-                      {[{
-                        title: "Theory: Road Signs",
-                        date: "Today, 2:00 PM",
-                        instructor: "Mike Brown"
-                      }, {
-                        title: "Practical: Parking Skills",
-                        date: "Today, 4:30 PM",
-                        instructor: "Lisa Taylor"
-                      }, {
-                        title: "Theory: Traffic Rules",
-                        date: "Tomorrow, 10:00 AM",
-                        instructor: "Mike Brown"
-                      }, {
-                        title: "Practical: City Driving",
-                        date: "Tomorrow, 1:00 PM",
-                        instructor: "James Wilson"
-                      }, {
-                        title: "Practical: Highway Driving",
-                        date: "Friday, 11:00 AM",
-                        instructor: "Lisa Taylor"
-                      }].map((item, i) => <div key={i} className="flex items-center">
+                      {dashboardLoading ? (
+                        // Loading skeleton
+                        Array.from({ length: 5 }).map((_, i) => (
+                          <div key={i} className="flex items-center">
+                            <div className="mr-2 h-8 w-8 bg-muted animate-pulse rounded-full" />
+                            <div className="flex-1 ml-2 space-y-2">
+                              <div className="h-4 w-3/4 bg-muted animate-pulse rounded" />
+                              <div className="h-3 w-1/2 bg-muted animate-pulse rounded" />
+                            </div>
+                          </div>
+                        ))
+                      ) : upcomingClasses.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No upcoming classes scheduled
+                        </p>
+                      ) : (
+                        upcomingClasses.map((classItem) => (
+                          <div key={classItem.id} className="flex items-center">
                             <div className="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-muted">
                               <Calendar className="h-4 w-4" />
                             </div>
                             <div className="flex-1 ml-2">
-                              <p className="text-sm font-medium">{item.title}</p>
+                              <p className="text-sm font-medium">
+                                {classItem.type}: {classItem.className}
+                              </p>
                               <div className="flex items-center">
-                                <p className="text-xs text-muted-foreground">{item.date}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatClassDate(classItem.date, classItem.startTime)}
+                                </p>
                                 <span className="text-xs mx-1 text-muted-foreground">•</span>
-                                <p className="text-xs text-muted-foreground">{item.instructor}</p>
+                                <p className="text-xs text-muted-foreground">{classItem.instructor}</p>
                               </div>
                             </div>
-                          </div>)}
+                          </div>
+                        ))
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -935,7 +1053,10 @@ const Admin = () => {
                     asChild 
                     isActive={activeSection === "dashboard"} 
                     tooltip="Dashboard"
-                    onClick={() => setActiveSection("dashboard")}
+                    onClick={() => {
+                      setActiveSection("dashboard");
+                      setDashboardRefreshKey(prev => prev + 1); // Force refresh on click
+                    }}
                   >
                     <button>
                       <Activity size={20} />
