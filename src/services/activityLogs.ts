@@ -602,15 +602,17 @@ export const logClassScheduled = async (
   classId: string,
   className: string,
   date: string,
+  studentOrGroup?: string,
   instructor?: string
 ): Promise<void> => {
   // Format date to be shorter (e.g., "Dec 22")
   const shortDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const context = studentOrGroup ? ` for ${studentOrGroup}` : '';
   await logActivity({
     actionType: 'class_scheduled',
     entityType: 'class',
     entityId: classId,
-    description: `${className} scheduled for ${shortDate}`,
+    description: `${className}${context} scheduled for ${shortDate}`,
     logLevel: 'info',
   });
 };
@@ -629,6 +631,46 @@ export const logClassCompleted = async (
     entityId: classId,
     description: studentName ? `${studentName} completed ${className}` : `${className} completed`,
     logLevel: 'info',
+  });
+};
+
+/**
+ * Log class update with context
+ */
+export const logClassUpdated = async (
+  classId: string,
+  className: string,
+  studentOrGroup?: string,
+  changes?: string
+): Promise<void> => {
+  const context = studentOrGroup ? ` (${studentOrGroup})` : '';
+  const changeInfo = changes ? ` → ${changes}` : '';
+  await logActivity({
+    actionType: 'update',
+    entityType: 'class',
+    entityId: classId,
+    description: `Updated ${className}${context}${changeInfo}`,
+    logLevel: 'info',
+  });
+};
+
+/**
+ * Log class deletion with context
+ */
+export const logClassDeleted = async (
+  classId: string,
+  className: string,
+  studentOrGroup?: string,
+  date?: string
+): Promise<void> => {
+  const context = studentOrGroup ? ` for ${studentOrGroup}` : '';
+  const dateInfo = date ? ` on ${new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : '';
+  await logActivity({
+    actionType: 'delete',
+    entityType: 'class',
+    entityId: classId,
+    description: `Deleted ${className}${context}${dateInfo}`,
+    logLevel: 'warning',
   });
 };
 

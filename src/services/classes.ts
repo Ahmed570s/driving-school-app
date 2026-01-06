@@ -1,6 +1,6 @@
 // Classes Service Layer - Handles all database operations for classes/lessons
 import { supabase } from '@/lib/supabaseClient';
-import { logActivity, logClassScheduled, logClassCompleted, logUpdate, logDelete } from './activityLogs';
+import { logClassScheduled, logClassCompleted, logClassUpdated, logClassDeleted } from './activityLogs';
 
 // ============================================================================
 // TYPES - What data looks like coming from the database
@@ -483,11 +483,12 @@ export const createClass = async (classData: ClassFormData): Promise<ClassItem> 
     
     const classItem = convertToClassItem(data);
     
-    // Log the class scheduling
+    // Log the class scheduling with student/group context
     await logClassScheduled(
       classItem.id,
       classItem.className,
       classItem.date,
+      classItem.student, // Student name or group name
       classItem.instructor
     );
     
@@ -654,7 +655,10 @@ export const updateClass = async (id: string, updates: Partial<ClassItem>): Prom
     if (updates.status === 'completed') {
       await logClassCompleted(updatedClass.id, updatedClass.className, updatedClass.student);
     } else {
-      await logUpdate('class', id, updatedClass.className, {}, updates);
+      // Build change summary
+      const changedFields = Object.keys(updates).filter(k => k !== 'id');
+      const changesSummary = changedFields.length === 1 ? changedFields[0] : `${changedFields.length} fields`;
+      await logClassUpdated(updatedClass.id, updatedClass.className, updatedClass.student, changesSummary);
     }
     
     return updatedClass;
@@ -675,6 +679,8 @@ export const deleteClass = async (id: string): Promise<void> => {
     // Get class info before deleting for logging
     const classToDelete = await getClassById(id);
     const className = classToDelete?.className || `Class ${id}`;
+    const studentOrGroup = classToDelete?.student || classToDelete?.group;
+    const classDate = classToDelete?.date;
 
     const { error } = await supabase
       .from('classes')
@@ -686,8 +692,8 @@ export const deleteClass = async (id: string): Promise<void> => {
       throw new Error('Failed to delete class from database');
     }
 
-    // Log the deletion
-    await logDelete('class', id, className);
+    // Log the deletion with student/group context
+    await logClassDeleted(id, className, studentOrGroup, classDate);
 
     console.log('✅ Successfully deleted class');
 
